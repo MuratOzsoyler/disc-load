@@ -19,11 +19,14 @@ data InputState = InputState
         , trackInfos :: Vector ItemInfo
         , sanitize :: InputState -> InputState
         , expandFillIdx :: Int
+        , inputResult :: InputResult
         }
         -- deriving Show
 
 emptyInputState :: InputState
-emptyInputState = InputState emptyItemInfo empty id 0
+emptyInputState = InputState emptyItemInfo empty id 0 InputResultRipDisc
 
 data InputEvent = Closed | Escaped | Clicked | OK | Cancel | Changed Int32 Int32 Text | NotChanged
         deriving Show
+
+data InputResult = InputResultRipDisc | InputResultSkipDisc
