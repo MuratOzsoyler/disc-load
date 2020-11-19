@@ -59,7 +59,7 @@ parseDiscInfo = \case
                     m = match parseLine t
                 in maybe vec (snoc vec) m
             init = empty
-            extract = \v -> InputState (head v) (tail v) id 0
+            extract = \v -> emptyInputState { albumInfo = head v, trackInfos = tail v } -- InputState (head v) (tail v) id 0 InputResultSkipDisc
         in fold s f
                     
 parseLine :: RE' ItemInfo
