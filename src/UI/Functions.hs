@@ -28,7 +28,7 @@ import GI.Gtk.Declarative.Container.Grid (width, leftAttach, topAttach
 import DiscHandling.Utils
 import UI.Types
 
-import Debug.Trace
+-- import Debug.Trace
 
 expandFillTable :: Vector (Bool, Bool, Bool, Align)
 expandFillTable = 
@@ -55,8 +55,6 @@ inputView state = bin
     ApplicationWindow
     [ #title := "Enter/Change CD Titles"
     , on #deleteEvent $ const (False, Closed)
-    -- , #widthRequest := 400    
-    -- , #heightRequest := 300
     ]
     $ bin
         ScrolledWindow
@@ -76,14 +74,14 @@ inputView state = bin
                 [GridChild 
                     def {topAttach = 2, leftAttach = 0, width = 2} 
                     $ container Box [#hexpand := True, #orientation := OrientationHorizontal, #spacing := 2]
-                        [ widget Label [#label := 
-                                            ("Tracks: idx=" <> pack (show idx) 
-                                                <> ", boxChildExpand=" <> pack (show boxChildExpand) 
-                                                <> ", boxChildFill=" <> pack (show boxChildFill)
-                                                <> ", sepExpand=" <> pack (show sepExpand)
-                                                <> ", sepFill=" <> pack (show sepFill)
-                                            )
-                                       ] 
+                        [ widget Label [#label := "Tracks"]
+                                    --         ("Tracks: idx=" <> pack (show idx) 
+                                    --             <> ", boxChildExpand=" <> pack (show boxChildExpand) 
+                                    --             <> ", boxChildFill=" <> pack (show boxChildFill)
+                                    --             <> ", sepExpand=" <> pack (show sepExpand)
+                                    --             <> ", sepFill=" <> pack (show sepFill)
+                                    --         )
+                                    --    ] 
                         , BoxChild def {fill = boxChildFill, expand = boxChildExpand}
                             $ widget Separator 
                                 [ #hexpand := sepExpand
@@ -97,16 +95,16 @@ inputView state = bin
                 [ GridChild 
                     def {topAttach = fromIntegral $ length (trackInfos state) + 3, leftAttach = 0, width = 2} 
                     $ container Box [#hexpand := True, #orientation := OrientationHorizontal, #spacing := 2]
-                        [ widget Button 
+                        [ {- widget Button 
                             [ #label := "Değiştir"
                             , on #clicked Clicked
                             ]
-                        , widget Button 
-                            [ #label := "Tamam"
+                        , -} widget Button 
+                            [ #label := "Rip Disc"
                             , onM #clicked $ quitGUI OK
                             ]
                         , widget Button 
-                            [ #label := "Vazgeç"
+                            [ #label := "Cancel"
                             , onM #clicked $ quitGUI Cancel
                             ]
                         ]
@@ -132,18 +130,17 @@ inputView state = bin
                 , #text := value
                 , onM #changed $ \entry -> do
                     newVal <- get entry #text
-                    putStrLn $ "newValue=" <> show newVal
+                    -- putStrLn $ "newValue=" <> show newVal
                     let newValue = strip newVal
                         result = if value == newValue 
                             then NotChanged
                             else Changed row col newValue
-                    putStrLn $ "result=" <> show result
+                    -- putStrLn $ "result=" <> show result
                     return result
                 ]
     quitGUI :: InputEvent -> Button -> IO InputEvent
     quitGUI evt button = do
         typ <- glibType @ApplicationWindow
-        -- wgt <- toWidget button 
         mbWgt <- #getAncestor button typ
         case mbWgt of
             Nothing -> error "Couldn't find app window"
@@ -159,14 +156,14 @@ inputUpdate reverted state@InputState {..} =
         Closed -> Exit
         Escaped -> Transition reverted (return $ Just Closed) 
         Clicked -> Transition (sanitized { expandFillIdx = (expandFillIdx + 1) `mod` 16 }) (return Nothing)
-        OK -> Transition sanitized (return Nothing) -- (return $ Just Closed)
-        Cancel -> Transition reverted (return Nothing) -- state  (return $ Just Escaped)
-        NotChanged -> trace "not changed" $ Transition state (return Nothing)
+        OK -> Transition (sanitized {inputResult = InputResultRipDisc }) (return Nothing)
+        Cancel -> Transition reverted (return Nothing)
+        NotChanged -> {- trace "not changed" $ -} Transition state (return Nothing)
         Changed row col value -> 
             let row' = fromIntegral row
             in  Transition 
                 (sanitize $ case row' of
-                    1 -> state { albumInfo = trace "modify album" $ modifyItemInfo albumInfo }
+                    1 -> state { albumInfo = {- trace "modify album" $ -} modifyItemInfo albumInfo }
                     _ | row' >= 3 && row' < length trackInfos + 3 ->
                         let idx = row' - 3
                         in state
