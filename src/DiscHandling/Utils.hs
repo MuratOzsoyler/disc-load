@@ -102,7 +102,7 @@ getSanitize = do
     sanitizeEntity dft val = if null val then dft else strip val
 
 mkDirName :: ItemInfo -> FilePath
-mkDirName ItemInfo {..} = fromText title </> fromText from
+mkDirName ItemInfo {..} = fromText from </> fromText title
 
 optionsParser :: Parser (Maybe FilePath)
 optionsParser = optional $ optPath "work-dir" 'd' "Working directory"
