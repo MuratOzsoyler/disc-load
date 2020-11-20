@@ -3,7 +3,6 @@ module UI.Types where
 import Data.Int (Int32)
 import Data.Text (Text)
 import Data.Vector (empty, Vector)
-import Data.Functor.Identity (Identity)
 
 data ItemInfo = ItemInfo 
         { title :: Text
@@ -30,3 +29,4 @@ data InputEvent = Closed | Escaped | Clicked | OK | Cancel | Changed Int32 Int32
         deriving Show
 
 data InputResult = InputResultRipDisc | InputResultSkipDisc
+        deriving (Show, Eq)
