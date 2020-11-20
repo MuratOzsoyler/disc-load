@@ -156,7 +156,7 @@ inputUpdate reverted state@InputState {..} =
         Closed -> Exit
         Escaped -> Transition reverted (return $ Just Closed) 
         Clicked -> Transition (sanitized { expandFillIdx = (expandFillIdx + 1) `mod` 16 }) (return Nothing)
-        OK -> Transition (sanitized {inputResult = InputResultRipDisc }) (return Nothing)
+        OK -> Transition (sanitized { inputResult = InputResultRipDisc }) (return Nothing)
         Cancel -> Transition reverted (return Nothing)
         NotChanged -> Transition state (return Nothing)
         Changed row col value -> 
