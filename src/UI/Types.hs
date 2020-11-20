@@ -23,7 +23,7 @@ data InputState = InputState
         -- deriving Show
 
 emptyInputState :: InputState
-emptyInputState = InputState emptyItemInfo empty id 0 InputResultRipDisc
+emptyInputState = InputState emptyItemInfo empty id 0 InputResultSkipDisc
 
 data InputEvent = Closed | Escaped | Clicked | OK | Cancel | Changed Int32 Int32 Text | NotChanged
         deriving Show
