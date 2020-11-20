@@ -1,32 +1,27 @@
 module Main where
 
 import Prelude hiding (putStrLn)
-import Control.Monad (forM_, void, when)
+import Control.Monad (forM_, when)
 import Control.Monad.Loops (untilM_)
 import Data.Maybe (fromMaybe, isJust)
 import Data.Text (pack, Text, unpack)
 import Data.Text.IO (putStrLn)
-import Data.Vector (Vector, fromList)
 import System.IO (BufferMode (..), hSetBuffering, stdout)
-import Turtle ((</>), cd, echo, fromString, fromText, options, textToLine, toText, view)
--- import GI.Gtk
--- import GI.Gtk.Declarative
--- import GI.Gtk.Declarative.App.Simple
+import Turtle (cd, echo, fromString, options, textToLine, toText)
 
-import DiscHandling.Inspection
-import DiscHandling.Ripping
+import DiscHandling.Inspection ( parseDiscInfo, readDiscInfo )
+import DiscHandling.Ripping ( writeTracks )
 import DiscHandling.Utils
-import UI.Functions
+    ( createDirectory,
+      ejectDisc,
+      loadDisc,
+      mkDirName,
+      optionsParser,
+      shellQuote )
+import UI.Functions ( runInput )
 import UI.Interaction
-import UI.Types
-
--- textInput :: Vector (Text, Text)
--- textInput = fromList 
---     [ ("Album title", "Album from")
---     , ("Track title 1", "Track from 1")
---     , ("Track title 2", "Track from 2")
---     , ("", "")
---     ]
+    ( getContinueConfirm, getRipConfirm, promptDisc )
+import UI.Types ( InputState(..), ItemInfo(..) )
 
 programTitle :: Text
 programTitle = "Audio CD Ripper"
@@ -48,7 +43,6 @@ main = do
         promptDisc
         loadDisc
         info <- readDiscInfo
-        -- maybe (return ()) view info
         when (isJust info) $ do
             discInfo@InputState {..} <- parseDiscInfo info
             print albumInfo
