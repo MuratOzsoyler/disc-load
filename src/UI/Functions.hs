@@ -1,16 +1,14 @@
 {-# LANGUAGE TypeApplications #-}
 module UI.Functions where
 
-import Control.Monad (guard)
 import Data.Default.Class (Default (def))
-import Data.Int
-import Data.Maybe (fromMaybe)
-import Data.Text as Text (Text, null, pack, strip)
-import Data.Vector ((!), (!?), fromList, toList, Vector)
-import qualified Data.Vector as Vector (concat, drop, map, modify)
+import Data.Int ( Int32 )
+import Data.Text as Text (Text, strip)
+import Data.Vector ((!), fromList, toList, Vector)
+import qualified Data.Vector as Vector (concat, modify)
 import qualified Data.Vector.Mutable as MVector (modify)
 
-import GI.Gtk.Declarative (fill, defaultBoxChildProperties, BoxChild(BoxChild)
+import GI.Gtk.Declarative (fill, BoxChild(BoxChild)
                           , expand, widget, Attribute((:=)), bin, container, on
                           , onM
                           )
@@ -18,15 +16,19 @@ import GI.Gtk.Declarative.App.Simple (App(..), AppView, run, Transition(..))
 import GI.Gtk (Label(Label), Box(Box), Orientation(OrientationHorizontal)
               , Separator(Separator), Align(AlignFill, AlignCenter), Entry(Entry)
               , Grid(Grid), ApplicationWindow(ApplicationWindow)
-              , get, Button (Button), Window (Window), glibType, Widget, toWidget
+              , get, Button (Button), Window (Window), glibType
               , unsafeCastTo, ScrolledWindow (ScrolledWindow), PolicyType(..)
               )
 import GI.Gtk.Declarative.Container.Grid (width, leftAttach, topAttach
-                                         , GridChild(GridChild), defaultGridChildProperties
+                                         , GridChild(GridChild)
                                          )
 
-import DiscHandling.Utils
+import DiscHandling.Utils ( getSanitize )
 import UI.Types
+    ( InputEvent(..),
+      InputResult(InputResultRipDisc),
+      InputState(..),
+      ItemInfo(..) )
 
 -- import Debug.Trace
 
@@ -114,14 +116,14 @@ inputView state = bin
     idx = expandFillIdx state
     (boxChildExpand, boxChildFill, sepExpand, sepFill) = expandFillTable ! idx
     itemView :: (Int32, Text, ItemInfo) -> Vector (GridChild InputEvent)
-    itemView (row, itemLabel, (ItemInfo {..})) = 
+    itemView (row, itemLabel, ItemInfo {..}) = 
         [ gridChild 0 "title" title
         , gridChild 1 "from" from
         ]
       where
         gridChild col itemType value = GridChild 
             def { topAttach = row, leftAttach = col }
-            $ entryWidget
+            entryWidget
           where
             entryWidget = widget Entry 
                 [ #hexpand := True
@@ -130,12 +132,10 @@ inputView state = bin
                 , #text := value
                 , onM #changed $ \entry -> do
                     newVal <- get entry #text
-                    -- putStrLn $ "newValue=" <> show newVal
                     let newValue = strip newVal
                         result = if value == newValue 
                             then NotChanged
                             else Changed row col newValue
-                    -- putStrLn $ "result=" <> show result
                     return result
                 ]
     quitGUI :: InputEvent -> Button -> IO InputEvent
@@ -158,12 +158,12 @@ inputUpdate reverted state@InputState {..} =
         Clicked -> Transition (sanitized { expandFillIdx = (expandFillIdx + 1) `mod` 16 }) (return Nothing)
         OK -> Transition (sanitized {inputResult = InputResultRipDisc }) (return Nothing)
         Cancel -> Transition reverted (return Nothing)
-        NotChanged -> {- trace "not changed" $ -} Transition state (return Nothing)
+        NotChanged -> Transition state (return Nothing)
         Changed row col value -> 
             let row' = fromIntegral row
             in  Transition 
                 (sanitize $ case row' of
-                    1 -> state { albumInfo = {- trace "modify album" $ -} modifyItemInfo albumInfo }
+                    1 -> state { albumInfo = modifyItemInfo albumInfo }
                     _ | row' >= 3 && row' < length trackInfos + 3 ->
                         let idx = row' - 3
                         in state
