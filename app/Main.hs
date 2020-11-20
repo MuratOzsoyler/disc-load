@@ -21,7 +21,7 @@ import DiscHandling.Utils
 import UI.Functions ( runInput )
 import UI.Interaction
     ( getContinueConfirm, getRipConfirm, promptDisc )
-import UI.Types ( InputState(..), ItemInfo(..) )
+import UI.Types (InputResult(InputResultRipDisc),  InputState(..), ItemInfo(..) )
 
 programTitle :: Text
 programTitle = "Audio CD Ripper"
@@ -47,13 +47,13 @@ main = do
             discInfo@InputState {..} <- parseDiscInfo info
             print albumInfo
             print trackInfos
-            discOutput <- runInput discInfo
+            discOutput@InputState {..} <- runInput discInfo
             printDiscOutput discOutput
 
-            ok <- getRipConfirm
-            when ok $ do
-                let InputState {..} = discOutput
-                    dirName = mkDirName albumInfo
+            -- ok <- getRipConfirm
+            
+            when (inputResult == InputResultRipDisc) $ do
+                let dirName = mkDirName albumInfo
                 echo $ fromMaybe "Invalid text!" $ textToLine $ shellQuote $ either id id $ toText dirName
                 createDirectory $ shellQuote $ either id id $ toText dirName
                 writeTracks dirName (from albumInfo) trackInfos
