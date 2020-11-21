@@ -5,8 +5,9 @@ import Data.Default.Class (Default (def))
 import Data.Int ( Int32 )
 import Data.Text as Text (Text, strip)
 import Data.Vector as Vector ((!), concat, cons, fromList, imap
-                             , map, modify, splitAt, toList, Vector
+                             , modify, splitAt, toList, Vector
                              )
+import qualified Data.Vector as Vector (map)
 import qualified Data.Vector.Mutable as MVector (modify)
 
 import GI.Gtk.Declarative (fill
@@ -32,8 +33,6 @@ import UI.Types
       InputState(..),
       ItemInfo(..) )
 
--- import Debug.Trace
-
 expandFillTable :: Vector (Bool, Bool, Bool, Align)
 expandFillTable = 
     [ (True,  True,  True,  AlignFill)
@@ -55,7 +54,7 @@ expandFillTable =
     ]
 
 inputView :: InputState -> AppView ApplicationWindow InputEvent
-inputView state = bin
+inputView InputState {..} = bin
     ApplicationWindow
     [ #title := "Enter/Change CD Titles"
     , on #deleteEvent $ const (False, Closed)
@@ -73,7 +72,7 @@ inputView state = bin
                 [ GridChild def {width = 2} $ widget Label [#label := "Title"]
                 , GridChild def {leftAttach = 2} $ widget Label [#label := "From"]
                 ] 
-            , let (i, t) = Vector.splitAt 1 $ itemView (1, "album", albumInfo state)
+            , let (i, t) = Vector.splitAt 1 $ itemView 1 0 "album" albumInfo
                   i' = Vector.map (\GridChild {..} -> GridChild properties {width = 2} child) i
                   t' = Vector.map (\GridChild {..} -> GridChild properties {leftAttach = 2} child) t
               in i' <> t'
@@ -82,13 +81,6 @@ inputView state = bin
                     def {topAttach = 2, leftAttach = 0, width = 3} 
                     $ container Box [#hexpand := True, #orientation := OrientationHorizontal, #spacing := 2]
                         [ widget Label [#label := "Tracks"]
-                                    --         ("Tracks: idx=" <> pack (show idx) 
-                                    --             <> ", boxChildExpand=" <> pack (show boxChildExpand) 
-                                    --             <> ", boxChildFill=" <> pack (show boxChildFill)
-                                    --             <> ", sepExpand=" <> pack (show sepExpand)
-                                    --             <> ", sepFill=" <> pack (show sepFill)
-                                    --         )
-                                    --    ] 
                         , BoxChild def {fill = boxChildFill, expand = boxChildExpand}
                             $ widget Separator 
                                 [ #hexpand := sepExpand
@@ -99,16 +91,12 @@ inputView state = bin
                 ]
             , Vector.concat 
                 $ zipWith trackView [1..]
-                $ zip3 [3..] (repeat "track") (toList $ trackInfos state)
+                $ zip3 [3..] (repeat "track") (toList trackInfos)
             , fromList 
                 [ GridChild 
-                    def {topAttach = fromIntegral $ length (trackInfos state) + 3, leftAttach = 0, width = 2} 
+                    def {topAttach = fromIntegral $ length trackInfos + 3, leftAttach = 0, width = 2} 
                     $ container Box [#hexpand := True, #orientation := OrientationHorizontal, #spacing := 2]
-                        [ {- widget Button 
-                            [ #label := "Değiştir"
-                            , on #clicked Clicked
-                            ]
-                        , -} widget Button 
+                        [ widget Button 
                             [ #label := "Rip Disc"
                             , onM #clicked $ quitGUI OK
                             ]
@@ -120,10 +108,10 @@ inputView state = bin
                 ]
             ]
   where
-    idx = expandFillIdx state
+    idx = expandFillIdx
     (boxChildExpand, boxChildFill, sepExpand, sepFill) = expandFillTable ! idx
     trackView :: Int -> (Int32, Text, ItemInfo) -> Vector (GridChild InputEvent)
-    trackView trackIdx itemViewParams@(row, _, _) =
+    trackView trackIdx (row, itemLabel, itemInfo) =
         Vector.imap 
             (\idx GridChild {..} -> GridChild (properties {leftAttach = fromIntegral idx}) child)
             $ GridChild 
@@ -133,30 +121,30 @@ inputView state = bin
                     , #halign := AlignEnd
                     ])
             `cons` 
-                itemView itemViewParams
-    itemView :: (Int32, Text, ItemInfo) -> Vector (GridChild InputEvent)
-    itemView (row, itemLabel, ItemInfo {..}) = 
-        [ gridChild 0 "title" title
-        , gridChild 1 "from" from
-        ]
+                itemView row 1 itemLabel itemInfo
+    itemView :: Int32 -> Int32 -> Text -> ItemInfo -> Vector (GridChild InputEvent)
+    itemView row startCol itemLabel ItemInfo {..} = fromList $ map
+        (\(col, typ, entry) -> gridChild 
+            (props row col) 
+            (entryWidget typ itemLabel row col entry)
+            )
+        (zip3 [startCol ..] ["title", "from"] [title, from])
       where
-        gridChild col itemType value = GridChild 
-            def { topAttach = row, leftAttach = col }
-            entryWidget
-          where
-            entryWidget = widget Entry 
-                [ #hexpand := True
-                , #halign := AlignFill
-                , #placeholderText := ("Enter \"" <> itemType <> "\" value for " <> itemLabel)
-                , #text := value
-                , onM #changed $ \entry -> do
-                    newVal <- get entry #text
-                    let newValue = strip newVal
-                        result = if value == newValue 
-                            then NotChanged
-                            else Changed row col newValue
-                    return result
-                ]
+        props row col p = p { leftAttach = col, topAttach = row }
+    gridChild propf widgetf = GridChild (propf def) widgetf
+    entryWidget itemType itemLabel row col value = widget Entry 
+        [ #hexpand := True
+        , #halign := AlignFill
+        , #placeholderText := ("Enter \"" <> itemType <> "\" value for " <> itemLabel)
+        , #text := value
+        , onM #changed $ \entry -> do
+            newVal <- get entry #text
+            let newValue = strip newVal
+                result = if value == newValue 
+                    then NotChanged
+                    else Changed row col newValue
+            return result
+        ]
     quitGUI :: InputEvent -> Button -> IO InputEvent
     quitGUI evt button = do
         typ <- glibType @ApplicationWindow
