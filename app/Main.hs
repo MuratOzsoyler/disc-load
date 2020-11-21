@@ -42,15 +42,22 @@ main = do
         promptDisc
         loadDisc
         info <- readDiscInfo
+        -- let info = Just $ select ([] :: [Line])
         when (isJust info) $ do
             discInfo@InputState {..} <- parseDiscInfo info
+            -- let discInfo@InputState {..} = emptyInputState 
+            --         { albumInfo = ItemInfo "Üstad" "Münir Nurettin Selçuk" 
+            --         , trackInfos = fromList
+            --             [ ItemInfo "Track 01" ""
+            --             , ItemInfo "Track 02" ""
+            --             , ItemInfo "Track 03" ""
+            --             ]
+            --         } 
             print albumInfo
             print trackInfos
             discOutput@InputState {..} <- runInput discInfo
             printDiscOutput discOutput
 
-            -- ok <- getRipConfirm
-            
             when (inputResult == InputResultRipDisc) $ do
                 let dirName = mkDirName albumInfo
                 echo $ fromMaybe "Invalid text!" $ textToLine $ shellQuote $ either id id $ toText dirName

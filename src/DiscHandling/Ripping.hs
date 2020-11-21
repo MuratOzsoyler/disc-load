@@ -2,21 +2,18 @@ module DiscHandling.Ripping where
 
 import Prelude hiding (FilePath)
 import Control.Monad.IO.Class (MonadIO)
-import Data.Either (either)
 import Data.Maybe (fromJust)
-import Data.Text (pack, Text)
-import Data.Text.IO (putStrLn)
-import Data.Vector (imapM_, indexed, Vector)
-import Turtle ((<.>), (</>), (%), echo, format
-              , fromText, ExitCode (..), FilePath, Format
-              , s, shellStrictWithErr, textToLine, toText, UTCTime
+import Data.Text (Text)
+import Data.Vector (imapM_, Vector)
+import Turtle ((<.>), (</>), (%), d, echo, format
+              , fromText, ExitCode (..), FilePath
+              , s, shellStrictWithErr, textToLine, toText
               ) 
-import Debug.Trace
 
-import UI.Types
-import DiscHandling.Utils
+import UI.Types ( ItemInfo(..) )
+import DiscHandling.Utils ( shellQuote, showText, i99, takeValue )
 
-writeTracks :: MonadIO m => FilePath -> Text -> Vector (ItemInfo) -> m ()
+writeTracks :: MonadIO m => FilePath -> Text -> Vector ItemInfo -> m ()
 writeTracks dirName albumFrom trackInfos = do
     echo "Start of processing..."
     imapM_ sngTrackProcess trackInfos
@@ -29,7 +26,8 @@ writeTracks dirName albumFrom trackInfos = do
           where
             trackIdx = n + 1
             writeTrack = do
-                (exitCode, _, _) <- shellStrictWithErr (trace $ format trackRipCmd trackIdx (shellQuote fileName)) mempty
+                -- let (exitCode, cmd, _) = (ExitSuccess, format trackRipCmd trackIdx (shellQuote fileName), True)
+                (exitCode, _, _) <- shellStrictWithErr (format trackRipCmd trackIdx (shellQuote fileName)) mempty
                 case exitCode of
                     ExitFailure code -> echo . fromJust . textToLine
                         $ "Error creating file:"
@@ -38,14 +36,15 @@ writeTracks dirName albumFrom trackInfos = do
             endOfTrackProcessing = echo " ...created."
             trackCnt             = length trackInfos
             trackRipCmd =
-                "cdda2wav dev=/dev/cdrom -gui -cddb -1 -no-textfile -no-infofile -verbose-level disable -track " % i99 % " - | ffmpeg -i - " % s
+                "cdda2wav dev=/dev/cdrom -gui -cddb -1 -no-textfile -no-infofile -verbose-level disable -track " % d % " - | ffmpeg -i - " % s
             fileName = either id id (toText 
                 $ dirName
-                </> (fromText $ format (i99 % ". " % s % " - " % s) 
-                        trackIdx
-                        (takeValue from albumFrom)
-                        title
-                        )
+                </> fromText
+                        (format (i99 % ". " % s % " - " % s) 
+                            trackIdx
+                            (takeValue from albumFrom)
+                            title
+                            )
                 <.> "m4a"
                 )
             startOfTrackProcessing =
