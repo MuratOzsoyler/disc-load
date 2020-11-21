@@ -4,14 +4,17 @@ import Prelude hiding (head, lines, null, tail)
 import Control.Exception.Base (catchJust, fromException, SomeException)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Data.Char (isDigit)
-import Data.Text (lines, null, pack, Text)
+import Data.Text (lines, null, pack)
 import Data.Text.Encoding (decodeUtf8With)
-import Data.Vector (empty, head, snoc, tail, Vector)
+import Data.Vector (empty, head, snoc, tail)
 import Text.Regex.Applicative.Text ((<|>), anySym, few, match, optional, psym, RE', string, sym)
 import Turtle (echo, err, ExitCode (..), fold, Fold (..), Line, lineToText, select, Shell, unsafeTextToLine)
 import Turtle.Bytes (inshell, strict)
 
 import UI.Types
+    ( InputState(albumInfo, trackInfos),
+      ItemInfo(ItemInfo),
+      emptyInputState )
 
 readDiscInfo :: MonadIO m => m (Maybe (Shell Line)) 
 readDiscInfo = do
@@ -24,15 +27,6 @@ readDiscInfo = do
             . lines 
             . decodeUtf8With utf8Error 
             <$> strict (inshell discInfoCmd mempty)
-
-            {- 
-            -- return 
-            -- $ Just
-            -- $ (unsafeTextToLine <$>)
-            -- $ concat
-            -- $ filter null . lines . decodeUtf8With utf8Error 
-            -- <$> inshell discInfoCmd mempty
-            -}
             )
         (\(ExitFailure e) -> do
             err $ unsafeTextToLine $ "Error reading disc info: " <> pack (show e)
@@ -50,7 +44,7 @@ toExitCode = fromException
 parseDiscInfo :: MonadIO m => Maybe (Shell Line) -> m InputState
 parseDiscInfo = \case
     Nothing -> do
-        err $ "No disc data"
+        err "No disc data"
         return emptyInputState
     Just s -> 
         let f = Fold step init extract
@@ -67,5 +61,5 @@ parseLine = ItemInfo <$> (parsePfx *> title) <*> from
   where
     parsePfx = string "Album " <|> (sym 'T' *> dgt *> dgt *> string ": ")
     dgt = psym isDigit
-    title = pack <$> (string "title" *> optional (sym ':') *> string " '" *> few (anySym)) <* sym '\''
-    from = pack <$> (string " from '" *> few (anySym)) <* sym '\''
+    title = pack <$> (string "title" *> optional (sym ':') *> string " '" *> few anySym) <* sym '\''
+    from = pack <$> (string " from '" *> few anySym) <* sym '\''
