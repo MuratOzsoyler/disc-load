@@ -4,26 +4,28 @@ module UI.Functions where
 import Data.Default.Class (Default (def))
 import Data.Int ( Int32 )
 import Data.Text as Text (Text, strip)
-import Data.Vector ((!), fromList, toList, Vector)
-import qualified Data.Vector as Vector (concat, modify)
+import Data.Vector as Vector ((!), concat, cons, fromList, imap
+                             , map, modify, splitAt, toList, Vector
+                             )
 import qualified Data.Vector.Mutable as MVector (modify)
 
-import GI.Gtk.Declarative (fill, BoxChild(BoxChild)
+import GI.Gtk.Declarative (fill
                           , expand, widget, Attribute((:=)), bin, container, on
                           , onM
                           )
+import GI.Gtk.Declarative.Container.Box (BoxChild(BoxChild))
+import GI.Gtk.Declarative.Container.Grid (width, leftAttach, topAttach
+                                         , GridChild (..)
+                                         )
 import GI.Gtk.Declarative.App.Simple (App(..), AppView, run, Transition(..))
 import GI.Gtk (Label(Label), Box(Box), Orientation(OrientationHorizontal)
-              , Separator(Separator), Align(AlignFill, AlignCenter), Entry(Entry)
+              , Separator(Separator), Align(AlignFill, AlignCenter, AlignEnd), Entry(Entry)
               , Grid(Grid), ApplicationWindow(ApplicationWindow)
               , get, Button (Button), Window (Window), glibType
               , unsafeCastTo, ScrolledWindow (ScrolledWindow), PolicyType(..)
               )
-import GI.Gtk.Declarative.Container.Grid (width, leftAttach, topAttach
-                                         , GridChild(GridChild)
-                                         )
 
-import DiscHandling.Utils ( getSanitize )
+import DiscHandling.Utils (showText,  getSanitize )
 import UI.Types
     ( InputEvent(..),
       InputResult(InputResultRipDisc),
@@ -68,13 +70,16 @@ inputView state = bin
         [#hexpand := True, #rowSpacing := 2, #columnSpacing := 2, #margin := 4]
         $ Vector.concat 
             [ fromList
-                [ GridChild def $ widget Label [#label := "Title"]
-                , GridChild def {leftAttach = 1} $ widget Label [#label := "From"]
+                [ GridChild def {width = 2} $ widget Label [#label := "Title"]
+                , GridChild def {leftAttach = 2} $ widget Label [#label := "From"]
                 ] 
-            , itemView (1, "album", albumInfo state)
+            , let (i, t) = Vector.splitAt 1 $ itemView (1, "album", albumInfo state)
+                  i' = Vector.map (\GridChild {..} -> GridChild properties {width = 2} child) i
+                  t' = Vector.map (\GridChild {..} -> GridChild properties {leftAttach = 2} child) t
+              in i' <> t'
             , fromList 
                 [GridChild 
-                    def {topAttach = 2, leftAttach = 0, width = 2} 
+                    def {topAttach = 2, leftAttach = 0, width = 3} 
                     $ container Box [#hexpand := True, #orientation := OrientationHorizontal, #spacing := 2]
                         [ widget Label [#label := "Tracks"]
                                     --         ("Tracks: idx=" <> pack (show idx) 
@@ -92,7 +97,9 @@ inputView state = bin
                                 ] 
                         ]
                 ]
-            , Vector.concat $ map itemView $ zip3 [3..] (repeat "track") (toList $ trackInfos state)
+            , Vector.concat 
+                $ zipWith trackView [1..]
+                $ zip3 [3..] (repeat "track") (toList $ trackInfos state)
             , fromList 
                 [ GridChild 
                     def {topAttach = fromIntegral $ length (trackInfos state) + 3, leftAttach = 0, width = 2} 
@@ -115,6 +122,18 @@ inputView state = bin
   where
     idx = expandFillIdx state
     (boxChildExpand, boxChildFill, sepExpand, sepFill) = expandFillTable ! idx
+    trackView :: Int -> (Int32, Text, ItemInfo) -> Vector (GridChild InputEvent)
+    trackView trackIdx itemViewParams@(row, _, _) =
+        Vector.imap 
+            (\idx GridChild {..} -> GridChild (properties {leftAttach = fromIntegral idx}) child)
+            $ GridChild 
+                def {topAttach = row}
+                (widget Label 
+                    [ #label := showText trackIdx
+                    , #halign := AlignEnd
+                    ])
+            `cons` 
+                itemView itemViewParams
     itemView :: (Int32, Text, ItemInfo) -> Vector (GridChild InputEvent)
     itemView (row, itemLabel, ItemInfo {..}) = 
         [ gridChild 0 "title" title
