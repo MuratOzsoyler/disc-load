@@ -6,9 +6,9 @@ import Prelude hiding(getLine, putStr, putStrLn)
 import Control.Monad (void, when)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Loops (untilJust)
-import Data.Text as Text (any, pack, take, toUpper, unpack, Text)
+import Data.Text as Text (any, pack, take, toUpper, Text)
 import Data.Text.IO (getLine, putStr, putStrLn)
-import Turtle (echo, ExitCode (..), Line)
+import Turtle (ExitCode (..))
 import System.IO (BufferMode (..), hGetBuffering, hSetBuffering, stdin, stdout)
 
 getRetryConfirm, getContinueConfirm, getRipConfirm :: MonadIO m => m Bool
