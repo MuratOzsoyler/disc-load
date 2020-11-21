@@ -11,6 +11,7 @@ import Turtle ((<.>), (</>), (%), echo, format
               , fromText, ExitCode (..), FilePath, Format
               , s, shellStrictWithErr, textToLine, toText, UTCTime
               ) 
+import Debug.Trace
 
 import UI.Types
 import DiscHandling.Utils
@@ -28,7 +29,7 @@ writeTracks dirName albumFrom trackInfos = do
           where
             trackIdx = n + 1
             writeTrack = do
-                (exitCode, _, _) <- shellStrictWithErr (trackRipCmd <> shellQuote fileName) mempty
+                (exitCode, _, _) <- shellStrictWithErr (trace $ format trackRipCmd trackIdx (shellQuote fileName)) mempty
                 case exitCode of
                     ExitFailure code -> echo . fromJust . textToLine
                         $ "Error creating file:"
@@ -37,7 +38,7 @@ writeTracks dirName albumFrom trackInfos = do
             endOfTrackProcessing = echo " ...created."
             trackCnt             = length trackInfos
             trackRipCmd =
-                "cdda2wav dev=/dev/cdrom -gui -cddb -1 -no-textfile -no-infofile -verbose-level disable -track 1 - | ffmpeg -i - "
+                "cdda2wav dev=/dev/cdrom -gui -cddb -1 -no-textfile -no-infofile -verbose-level disable -track " % i99 % " - | ffmpeg -i - " % s
             fileName = either id id (toText 
                 $ dirName
                 </> (fromText $ format (i99 % ". " % s % " - " % s) 
