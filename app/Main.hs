@@ -51,6 +51,14 @@ main = do
             --             [ ItemInfo "Track 01" ""
             --             , ItemInfo "Track 02" ""
             --             , ItemInfo "Track 03" ""
+            --             , ItemInfo "Track 03" ""
+            --             , ItemInfo "Track 04" ""
+            --             , ItemInfo "Track 05" ""
+            --             , ItemInfo "Track 06" ""
+            --             , ItemInfo "Track 07" ""
+            --             , ItemInfo "Track 08" ""
+            --             , ItemInfo "Track 09" ""
+            --             , ItemInfo "Track 10" ""
             --             ]
             --         } 
             print albumInfo
@@ -63,6 +71,9 @@ main = do
                 echo $ fromMaybe "Invalid text!" $ textToLine $ shellQuote $ either id id $ toText dirName
                 createDirectory $ shellQuote $ either id id $ toText dirName
                 writeTracks dirName (from albumInfo) trackInfos
+        
+        echo "Do not forget to pick the disc off the tray and close the drive door"
+        ejectDisc
 
 printDiscOutput :: InputState -> IO ()
 printDiscOutput InputState {..} = do
