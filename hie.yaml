@@ -6,3 +6,5 @@ cradle:
           stack:
             - path: "./app"
             - path: "./src"
+            - path: "./gui-test"
+            
