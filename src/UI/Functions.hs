@@ -3,8 +3,9 @@ module UI.Functions where
 
 import Data.Default.Class (Default(def))
 import Data.Functor ((<&>))
-import Data.Text (strip, Text)
-import Data.Vector (toList, fromList)
+import Data.Text as Text (null, strip, Text)
+import Data.Vector (modify, toList, fromList)
+import qualified Data.Vector.Mutable as MVector (modify)
 import GI.Gtk 
         ( Align(AlignEnd, AlignFill)
         , ApplicationWindow (..)
@@ -35,27 +36,45 @@ import GI.Gtk.Declarative
         , Widget
         )
 import GI.Gtk.Declarative.App.Simple (Transition (..), AppView, App (..), run)
-import GI.Gtk.Declarative.Container.Grid (topAttach, leftAttach, width, GridChild(..))
+import GI.Gtk.Declarative.Container.Grid (GridChildProperties, topAttach, leftAttach, width, GridChild(..))
 import UI.Types (ItemInfo (..), InputEvent (..), InputState (..))
-import DiscHandling.Utils (showText)
+import DiscHandling.Utils (sanitize, defaultAlbumTitle, defaultAlbumArtist, defaultTrackTitle, showText)
+import Data.Int (Int32)
 
 runInput :: InputState -> IO InputState
-runInput = run . mkApp
+runInput state = run . mkApp state =<< defaultAlbumTitle
 
-mkApp :: InputState -> App ApplicationWindow InputState InputEvent
-mkApp state = App
-    { view = inputView
-    , update = inputUpdate
-    , inputs = mempty
-    , initialState = state 
-    }
+mkApp :: InputState -> Text -> App ApplicationWindow InputState InputEvent
+mkApp state defaultAlbumTitle = 
+    let sanitized = sanitize defaultAlbumTitle state
+    in App
+        { view = inputView defaultAlbumTitle
+        , update = inputUpdate sanitized
+        , inputs = mempty
+        , initialState = sanitized 
+        }
 
-inputUpdate :: InputState -> InputEvent -> Transition InputState InputEvent
-inputUpdate InputState {..} = error "not implemented"
- 
+inputUpdate :: InputState -> InputState -> InputEvent -> Transition InputState InputEvent
+inputUpdate initial state@InputState {..} = \case
+    Closed -> Exit
+    OK -> Transition state $ return $ Just Closed
+    Cancel -> Transition initial $ return $ Just Closed
+    TitleChanged idx value -> 
+        Transition (modifyState (modifyTitle value) idx) $ return Nothing
+    FromChanged idx value -> 
+        Transition (modifyState (modifyFrom value) idx) $ return Nothing
+    NotChanged -> error "NotChanged handling undefined"
+  where
+    modifyTitle value info = info { title = value }
+    modifyFrom value info = info { from = value }
+    modifyIdx idx f vec =  MVector.modify vec f $ fromIntegral idx
+    modifyTrackInfos idx f = modify (modifyIdx idx f) trackInfos
+    modifyState f = \case
+        -1 -> state { albumInfo = f albumInfo }
+        idx -> state { trackInfos = modifyTrackInfos idx f }
     
-inputView :: InputState -> AppView ApplicationWindow InputEvent
-inputView InputState {..} = bin
+inputView :: Text -> InputState -> AppView ApplicationWindow InputEvent
+inputView defaultAlbumTitle InputState {..} = bin
     ApplicationWindow
     [ #title := "Enter/Change CD Titles"
     , on #deleteEvent $ const (False, Closed)
@@ -90,32 +109,19 @@ inputView InputState {..} = bin
     albumSep = genericSep "Album"
     albumEntryRow :: [GridChild InputEvent]
     albumEntryRow = 
-        let ItemInfo {..} = albumInfo
-        in  [ gridChild propWidth2 
-                (entryWidget (mkPlaceHolder "title" "album") title 
-                    <&> entEvt2InpEvt (TitleChanged (-1)) 
-                    )
-            , gridChild propLeftAtch2
-                (entryWidget (mkPlaceHolder "from" "album") from
-                    <&> entEvt2InpEvt (FromChanged (-1))
-                    )
-            ]
+        let plcHolder = mkPlaceHolder "album" 
+        in  itemInfoRow (-1) propWidth2 plcHolder defaultAlbumTitle defaultAlbumArtist albumInfo
     tracksSep = genericSep "Tracks"
     trackInfoRows :: [[GridChild InputEvent]]
-    trackInfoRows = zipWith 
-        (\i ItemInfo {..} -> 
-            [ gridChild id $ widget Label [#label := showText (i + 1), #halign := AlignEnd]
-            , gridChild propLeftAtch1
-                (entryWidget (mkPlaceHolder "title" "track") title
-                    <&> entEvt2InpEvt (TitleChanged i)
-                    ) 
-            , gridChild propLeftAtch2 
-                (entryWidget (mkPlaceHolder "from" "track") from
-                    <&> entEvt2InpEvt (FromChanged i)
-                    )
-            ])
-        [0..]
-        $ toList trackInfos
+    trackInfoRows = 
+        let plcHolder = mkPlaceHolder "track"
+        in zipWith 
+            (\i info -> 
+                gridChild id (widget Label [#label := showText (i + 1), #halign := AlignEnd])
+                : itemInfoRow i propLeftAtch1 plcHolder defaultTrackTitle "" info
+                )
+            [0..]
+            $ toList trackInfos
     buttonsRow :: [[GridChild InputEvent]]
     buttonsRow =
         [[ gridChild propWidth2 
@@ -155,9 +161,30 @@ inputView InputState {..} = bin
                         ] 
                 ]
         ]
-    entEvt2InpEvt inpEvtCons (EntryChanged val) = inpEvtCons val
-    mkPlaceHolder typ label = "Enter \"" <> typ <> "\" value for " <> label
+    entEvt2InpEvt inpEvtCons defVal (EntryChanged val) = 
+        let val' = if Text.null val then defVal else strip val
+        in inpEvtCons val'
+    itemInfoRow 
+        :: Int32 
+        -> (GridChildProperties -> GridChildProperties) 
+        -> (Text -> Text) 
+        -> Text 
+        -> Text 
+        -> ItemInfo 
+        -> [GridChild InputEvent]
+    itemInfoRow idx fstProp plcHolder defTitle defFrom ItemInfo {..} = 
+        [gridChild fstProp 
+            (inputWidget (TitleChanged idx) (plcHolder "title") defTitle title) 
+        , gridChild propLeftAtch2 
+            (inputWidget (FromChanged idx) (plcHolder "from") defFrom from) 
+        ]
+    inputWidget :: (Text -> InputEvent) -> Text -> Text -> Text -> Widget InputEvent
+    inputWidget constr plcHolder defaultValue value = 
+        entryWidget plcHolder value
+        <&> entEvt2InpEvt constr defaultValue
+    mkPlaceHolder label typ = "Enter \"" <> typ <> "\" value for " <> label
     labelWgt lbl = widget Label [#label := lbl]
+    gridChild :: (GridChildProperties -> GridChildProperties) -> Widget InputEvent -> GridChild InputEvent
     gridChild propf = GridChild (propf def)
     propWidth2 p = p { width = 2 } 
     propLeftAtch1 p = p { leftAttach = 1 } 
