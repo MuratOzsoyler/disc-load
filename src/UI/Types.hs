@@ -16,16 +16,22 @@ emptyItemInfo = ItemInfo mempty mempty
 data InputState = InputState
         { albumInfo :: ItemInfo
         , trackInfos :: Vector ItemInfo
-        , sanitize :: InputState -> InputState
+        -- , sanitize :: InputState -> InputState
         , expandFillIdx :: Int
         , inputResult :: InputResult
         }
         -- deriving Show
 
 emptyInputState :: InputState
-emptyInputState = InputState emptyItemInfo empty id 0 InputResultSkipDisc
+emptyInputState = InputState emptyItemInfo empty {- id -} 0 InputResultSkipDisc
 
-data InputEvent = Closed | Escaped | Clicked | OK | Cancel | Changed Int32 Int32 Text | NotChanged
+data InputEvent = 
+        Closed 
+        | OK 
+        | Cancel 
+        | TitleChanged Int32 Text 
+        | FromChanged Int32 Text 
+        | NotChanged
         deriving Show
 
 data InputResult = InputResultRipDisc | InputResultSkipDisc

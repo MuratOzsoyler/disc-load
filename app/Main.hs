@@ -42,25 +42,8 @@ main = do
         promptDisc
         loadDisc
         info <- readDiscInfo
-        -- let info = Just $ select ([] :: [Line])
         when (isJust info) $ do
             discInfo@InputState {..} <- parseDiscInfo info
-            -- let discInfo@InputState {..} = emptyInputState 
-            --         { albumInfo = ItemInfo "Üstad" "Münir Nurettin Selçuk" 
-            --         , trackInfos = fromList
-            --             [ ItemInfo "Track 01" ""
-            --             , ItemInfo "Track 02" ""
-            --             , ItemInfo "Track 03" ""
-            --             , ItemInfo "Track 03" ""
-            --             , ItemInfo "Track 04" ""
-            --             , ItemInfo "Track 05" ""
-            --             , ItemInfo "Track 06" ""
-            --             , ItemInfo "Track 07" ""
-            --             , ItemInfo "Track 08" ""
-            --             , ItemInfo "Track 09" ""
-            --             , ItemInfo "Track 10" ""
-            --             ]
-            --         } 
             print albumInfo
             print trackInfos
             discOutput@InputState {..} <- runInput discInfo

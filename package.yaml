@@ -4,7 +4,7 @@ github:              "MuratOzsoyler/disk-load"
 license:             BSD3
 author:              "Murat Özsöyler"
 maintainer:          "murat.ozsoyler@gmail.com"
-copyright:           "202? Murat Özsöyler"
+copyright:           "2020 Murat Özsöyler"
 
 extra-source-files:
 - README.md
@@ -45,9 +45,18 @@ library:
   source-dirs: src
 
 executables:
-  disk-load-exe:
+  # disk-load-exe:
+  #   main:                Main.hs
+  #   source-dirs:         app
+  #   ghc-options:
+  #   - -threaded
+  #   - -rtsopts
+  #   - -with-rtsopts=-N
+  #   dependencies:
+  #   - disk-load
+  gui-test-exe:
     main:                Main.hs
-    source-dirs:         app
+    source-dirs:         gui-test
     ghc-options:
     - -threaded
     - -rtsopts
