@@ -3,14 +3,13 @@ module DiscHandling.Utils where
 import Prelude hiding (any, map, null, FilePath)
 import Control.Applicative ((<|>), optional)
 import Control.Monad.IO.Class (liftIO, MonadIO)
-import Data.Functor.Identity (Identity (..))
-import Data.Maybe (fromJust, fromMaybe, maybe)
+import Data.Maybe (fromJust)
 import Data.Text (any, cons, null, pack, strip, takeEnd, Text, uncons, unpack)
 import Data.Time (defaultTimeLocale, FormatTime, formatTime, getZonedTime)
-import Data.Vector(map, Vector)
+import Data.Vector(map)
 import Turtle ((%), (</>), echo, ExitCode (..), FilePath, Format, format, fromText
-              , makeFormat, optPath, Parser, s, shell, textToLine, unsafeTextToLine
-              , UTCTime
+              , makeFormat, optPath, Parser, s, shell, unsafeTextToLine
+              
               )
 import UI.Types
 
@@ -33,7 +32,7 @@ createDirectory :: MonadIO m => Text -> m ()
 createDirectory dirName = execCmdOrExit 
     ("mkdir -p " <> dirName)
     (format ("Directory '" % s % "' created.") dirName)
-    ("Error creating directory")
+    "Error creating directory"
 
 execCmdOrExit :: MonadIO m => Text -> Text -> Text -> m ()
 execCmdOrExit cmd successMsg failMsg = do
@@ -88,10 +87,11 @@ defaultAlbumArtist = "Unknown Artist"
 defaultTrackTitle  = "Unknown Track"
 
 getSanitize :: MonadIO m => m (InputState -> InputState)
-getSanitize = do
-    defAlbTtl <- defaultAlbumTitle
-    return $ \(state@InputState {..}) -> state
-        { albumInfo = sanitizeItem defAlbTtl defaultAlbumArtist albumInfo
+getSanitize = sanitize <$> defaultAlbumTitle
+
+sanitize :: Text -> InputState -> InputState
+sanitize defaultAlbumTitle state@InputState {..} = state
+        { albumInfo = sanitizeItem defaultAlbumTitle defaultAlbumArtist albumInfo
         , trackInfos = map (sanitizeItem defaultTrackTitle "") trackInfos
         }
   where
