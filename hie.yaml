@@ -7,4 +7,5 @@ cradle:
             - path: "./app"
             - path: "./src"
             - path: "./gui-test"
+            - path: "./test"
             
