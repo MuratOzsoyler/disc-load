@@ -55,8 +55,8 @@ main = do
                 createDirectory $ shellQuote $ either id id $ toText dirName
                 writeTracks dirName (from albumInfo) trackInfos
         
-        echo "Do not forget to pick the disc off the tray and close the drive door"
-        ejectDisc
+    echo "Do not forget to pick the disc off the tray and close the drive door"
+    ejectDisc
 
 printDiscOutput :: InputState -> IO ()
 printDiscOutput InputState {..} = do

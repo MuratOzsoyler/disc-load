@@ -38,8 +38,7 @@ import GI.Gtk.Declarative
         )
 import GI.Gtk.Declarative.App.Simple (Transition (..), AppView, App (..), run)
 import GI.Gtk.Declarative.Container.Grid (GridChildProperties, topAttach, leftAttach, width, GridChild(..))
-
-import UI.Types (ItemInfo (..), InputEvent (..), InputState (..))
+import UI.Types (ItemInfo (..), InputEvent (..), InputResult (..), InputState (..))
 import DiscHandling.Utils (sanitize, defaultAlbumTitle, defaultAlbumArtist, defaultTrackTitle, showText)
 
 -- import Debug.Trace
@@ -60,8 +59,8 @@ mkApp state defaultAlbumTitle =
 inputUpdate :: InputState -> InputState -> InputEvent -> Transition InputState InputEvent
 inputUpdate initial state@InputState {..} = \case
     Closed -> Exit
-    OK -> Transition state $ return $ Just Closed
-    Cancel -> Transition initial $ return $ Just Closed
+    OK -> Transition state { inputResult = InputResultRipDisc } $ return $ Just Closed
+    Cancel -> Transition initial { inputResult = InputResultSkipDisc } $ return $ Just Closed
     Toggled idx value -> Transition
         (case idx of
             -1 -> 
@@ -94,6 +93,7 @@ inputUpdate initial state@InputState {..} = \case
             else if allUnchecked
                 then False
                 else value 
+                
 inputView :: Text -> InputState -> AppView ApplicationWindow InputEvent
 inputView defaultAlbumTitle InputState {..} = bin
     ApplicationWindow
