@@ -15,19 +15,19 @@ programTitle = "Test Audio CD Ripper GUI"
 main :: IO ()
 main = do
     let discInfo@InputState {..} = emptyInputState 
-            { albumInfo = ItemInfo "Üstad" "Münir Nurettin Selçuk" 
+            { albumInfo = ItemInfo True "Üstad" "Münir Nurettin Selçuk" 
             , trackInfos = fromList
-                [ ItemInfo "Track 01" ""
-                , ItemInfo "Track 02" ""
-                , ItemInfo "Track 03" ""
-                , ItemInfo "Track 03" ""
-                , ItemInfo "Track 04" ""
-                , ItemInfo "Track 05" ""
-                , ItemInfo "Track 06" ""
-                , ItemInfo "Track 07" ""
-                , ItemInfo "Track 08" ""
-                , ItemInfo "Track 09" ""
-                , ItemInfo "Track 10" ""
+                [ ItemInfo True "Track 01" ""
+                , ItemInfo True "Track 02" ""
+                , ItemInfo True "Track 03" ""
+                , ItemInfo True "Track 03" ""
+                , ItemInfo True "Track 04" ""
+                , ItemInfo True "Track 05" ""
+                , ItemInfo True "Track 06" ""
+                , ItemInfo True "Track 07" ""
+                , ItemInfo True "Track 08" ""
+                , ItemInfo True "Track 09" ""
+                , ItemInfo True "Track 10" ""
                 ]
             } 
     print albumInfo
