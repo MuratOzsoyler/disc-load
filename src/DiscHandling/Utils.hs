@@ -7,11 +7,11 @@ import Data.Maybe (fromJust)
 import Data.Text (any, cons, null, pack, strip, takeEnd, Text, uncons, unpack)
 import Data.Time (defaultTimeLocale, FormatTime, formatTime, getZonedTime)
 import Data.Vector(map)
-import Turtle ((%), (</>), echo, ExitCode (..), FilePath, Format, format, fromText
-              , makeFormat, optPath, Parser, s, shell, unsafeTextToLine
-              
+import Turtle ((<.>), (%), (</>), echo, ExitCode (..), FilePath, Format, format, fromText
+              , makeFormat, optPath, Parser, s, shell, testfile, unsafeTextToLine
               )
 import UI.Types
+import System.IO.Unsafe (unsafePerformIO)
 
 unicodeReplChar :: Char
 unicodeReplChar = '\xFFFD'
@@ -91,18 +91,31 @@ getSanitize = sanitize <$> defaultAlbumTitle
 
 sanitize :: Text -> InputState -> InputState
 sanitize defaultAlbumTitle state@InputState {..} = state
-        { albumInfo = sanitizeItem defaultAlbumTitle defaultAlbumArtist albumInfo
-        , trackInfos = map (sanitizeItem defaultTrackTitle "") trackInfos
-        }
+    { albumInfo = sanitizeItem defaultAlbumTitle defaultAlbumArtist albumInfo
+    , trackInfos = map (sanitizeItem defaultTrackTitle "") trackInfos
+    }
   where
     sanitizeItem defTitle defFrom ItemInfo {..} = 
         let title' = sanitizeEntity defTitle title
             from' = sanitizeEntity defFrom from
-        in ItemInfo title' from'
+        in ItemInfo rip title' from'
     sanitizeEntity dft val = if null val then dft else strip val
 
 mkDirName :: ItemInfo -> FilePath
 mkDirName ItemInfo {..} = fromText from </> fromText title
+
+mkFileName :: Int -> FilePath -> Text -> ItemInfo -> FilePath
+mkFileName trackIdx dirName albumFrom ItemInfo {..} = dirName
+    </> fromText
+            (format (i99 % ". " % s % " - " % s) 
+            trackIdx
+            (takeValue from albumFrom)
+            title
+            )
+    <.> "m4a"
+
+fileExists :: FilePath -> Bool
+fileExists = unsafePerformIO . testfile 
 
 optionsParser :: Parser (Maybe FilePath)
 optionsParser = optional $ optPath "work-dir" 'd' "Working directory"
