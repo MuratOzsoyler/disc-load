@@ -5,13 +5,14 @@ import Data.Text (Text)
 import Data.Vector (empty, Vector)
 
 data ItemInfo = ItemInfo 
-        { title :: Text
+        { rip :: Bool
+        , title :: Text
         , from :: Text
         }
         deriving Show
 
 emptyItemInfo :: ItemInfo
-emptyItemInfo = ItemInfo mempty mempty
+emptyItemInfo = ItemInfo True mempty mempty
 
 data InputState = InputState
         { albumInfo :: ItemInfo
@@ -29,6 +30,7 @@ data InputEvent =
         Closed 
         | OK 
         | Cancel 
+        | Toggled Int32 Bool
         | TitleChanged Int32 Text 
         | FromChanged Int32 Text 
         | NotChanged

@@ -57,7 +57,7 @@ parseDiscInfo = \case
         in fold s f
                     
 parseLine :: RE' ItemInfo
-parseLine = ItemInfo <$> (parsePfx *> title) <*> from
+parseLine = ItemInfo True <$> (parsePfx *> title) <*> from
   where
     parsePfx = string "Album " <|> (sym 'T' *> dgt *> dgt *> string ": ")
     dgt = psym isDigit
