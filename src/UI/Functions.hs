@@ -148,7 +148,6 @@ inputView defaultAlbumTitle InputState {..} = bin
         in zipWith 
             (\i info -> 
                 gridChild id (widget Label [#label := showText (i + 1), #halign := AlignEnd])
-                -- : gridChild propLeftAtch1 (widget CheckButton [])
                 : itemInfoRow i propLeftAtch1 [#inconsistent := False] plcHolder defaultTrackTitle "" info
                 )
             [0..]
