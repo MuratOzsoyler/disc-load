@@ -119,3 +119,6 @@ fileExists = unsafePerformIO . testfile
 
 optionsParser :: Parser (Maybe FilePath)
 optionsParser = optional $ optPath "work-dir" 'd' "Working directory"
+
+mkPlaceHolder :: Text -> Text -> Text
+mkPlaceHolder typ fld = "Enter \"" <> fld <> "\" for " <> typ 
