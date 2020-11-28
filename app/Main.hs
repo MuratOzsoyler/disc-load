@@ -37,8 +37,8 @@ main = do
     hSetBuffering stdout NoBuffering
     putStrLn programTitle >> putStrLn ""
 
+    ejectDisc
     flip untilM_ (not <$> getContinueConfirm) $ do
-        ejectDisc
         promptDisc
         loadDisc
         info <- readDiscInfo
@@ -54,9 +54,9 @@ main = do
                 echo $ fromMaybe "Invalid text!" $ textToLine $ shellQuote $ either id id $ toText dirName
                 createDirectory $ shellQuote $ either id id $ toText dirName
                 writeTracks dirName (from albumInfo) trackInfos
-        
+        ejectDisc
+                
     echo "Do not forget to pick the disc off the tray and close the drive door"
-    ejectDisc
 
 printDiscOutput :: InputState -> IO ()
 printDiscOutput InputState {..} = do
