@@ -38,7 +38,7 @@ writeTracks dirName albumFrom trackInfos = do
         endOfTrackProcessing = echo " ...created."
         trackCnt             = length trackInfos
         trackRipCmd =
-            "cdda2wav dev=/dev/cdrom -gui -cddb -1 -no-textfile -no-infofile -verbose-level disable -track " % d % " - | ffmpeg -i -y - " % s
+            "cdda2wav dev=/dev/cdrom -gui -cddb -1 -no-textfile -no-infofile -verbose-level disable -track " % d % " - | ffmpeg -i - " % s
         fileName = mkFileName trackIdx dirName albumFrom trackInfo  
         fileNameToText = either id id $ toText fileName
         -- either id id (toText 
