@@ -1,37 +1,38 @@
-{-# LANGUAGE RecursiveDo #-}
 module UI.Functions where
 
-import UI.Types (ItemInfo (..), InputState (..))
+import Prelude as Prelude
+
+import Control.Applicative (Alternative((<|>)))
 import Control.Concurrent (MVar, readMVar, newMVar)
-import GI.Gtk (CheckButton (CheckButton), Orientation(OrientationHorizontal)
+import Control.Monad (forM, forM_, void)
+import Control.Monad.IO.Class (liftIO, MonadIO)
+import Data.Functor (($>))
+import Data.Int (Int32)
+import Data.List (intercalate, uncons)
+import Data.List.Extra (takeEnd)
+import Data.Maybe (fromJust, fromMaybe)
+import Data.Monoid (All(..))
+import Data.Text as Text (strip, length, null, unpack, Text)
+import Data.Tuple.Extra (thd3, snd3, fst3)
+import Data.Vector (toList)
+import System.IO.Unsafe (unsafePerformIO)
+
+import GI.Gio (applicationRun)
+import GI.Gtk (get, set, editableSetPosition, editableGetPosition
+              , CheckButton (CheckButton), Orientation(OrientationHorizontal)
               , toWidget, Separator (Separator), Box (Box),  Widget, Align(..)
               , Entry (Entry), Label (Label), Grid (Grid)
               , PolicyType(PolicyTypeAutomatic), ScrolledWindow (ScrolledWindow)
               , ApplicationWindow (ApplicationWindow), on, AttrOp((:=), (:=>)), new
               , Application(Application), castTo
               )
-import Control.Monad (forM, forM_, void)
-import GI.Gio (applicationRun)
-import DiscHandling.Utils (as, i99, mkPlaceHolder)
-import Data.Text (unpack, Text)
-import Control.Monad.IO.Class (MonadIO)
-import Data.Int (Int32)
-import Turtle ((%), d, s, format)
-import Data.Vector (toList)
-import System.IO.Unsafe (unsafePerformIO)
-import Control.Applicative (Alternative((<|>)))
-import Data.Functor (($>))
-import Data.List (intercalate, uncons)
-import Data.Maybe (fromJust, fromMaybe)
+import Reactive.Banana (filterE, Event, (<@), stepper, unionWith, accumB, whenE)
 import Reactive.Banana.Frameworks (reactimate, mapEventIO, compile, actuate, MomentIO)
 import Reactive.Banana.GI.Gtk (signalE0, AttrOpBehavior((:==)), sink, attrB, attrE)
-import Data.List.Extra (takeEnd)
-import Reactive.Banana (filterE, Event, (<@), stepper, unionWith, accumB, whenE)
-import GI.Gtk (get)
-import Data.Tuple.Extra (fst3)
-import GI.Gtk (set)
-import Data.Monoid (All(..))
-import Control.Monad.IO.Class (MonadIO(liftIO))
+import Turtle ((%), d, s, format)
+
+import DiscHandling.Utils (defaultTrackTitle, defaultAlbumArtist, defaultAlbumTitle, event2Behavior, as, i99, mkPlaceHolder)
+import UI.Types (ItemInfo (..), InputState (..))
 
 runInput :: InputState -> IO InputState
 runInput input = do
@@ -70,20 +71,34 @@ appActivate app stateVar = do
             <> forM (zip [1..] $ toList trackInfos) trackRow
             )
     forM_ (concat gridLines) $ \GridChild {..} -> #attach grid widget left top width height
-    let entryRows = takeEnd 3 <$> filter ((>= 3) . length) gridLines
+    let entryRows = takeEnd 3 <$> filter ((>= 3) . Prelude.length) gridLines
     print entryRows
     compile (networkDefinition entryRows) >>= actuate
     #showAll appWin
   where
     networkDefinition :: GridChildren -> MomentIO ()
-    networkDefinition entryRows = mdo 
+    networkDefinition entryRows = do 
         let (albumRow :: [GridChild], trackRows :: GridChildren) = fromJust $ uncons entryRows
-        (albumChk, albumTitle, albumFrom) <- itemRowWidgets albumRow
-        albumRipInitialValue <- get albumChk #active
+        (albumRip, albumTitle, albumFrom) <- itemRowWidgets albumRow
         trackRowWidgets <- zip [0..] <$> forM trackRows itemRowWidgets
         let trackRips = map (fst3 . snd) trackRowWidgets
+        ripHandlingDefinition albumRip trackRips
+        defAlbumTitle <- defaultAlbumTitle
+        -- entry sanitation
+        entryHandlingDefinition (-1) defAlbumTitle albumTitle
+        entryHandlingDefinition (-1) defaultAlbumArtist albumFrom
+        let trackEntries = map (\(i, (_, t, f)) -> (i, t, f)) trackRowWidgets
+            trackTitles = map (\(i, t, _) -> (i, t)) trackEntries
+            trackFroms = map (\(i, _, f) -> (i, f)) trackEntries
+        forM_ trackEntries $ \(i, t, f) -> do
+            entryHandlingDefinition i defaultTrackTitle t
+            entryHandlingDefinition i "" f
+
+        -- return ()
+    ripHandlingDefinition albumRip trackRips = do
+        albumRipInitialValue <- get albumRip #active
         trackRipInitialValues <- forM trackRips $ flip get #active
-        albumChkValueB <- stepper albumRipInitialValue =<< getCheckButtonActiveWhenClicked albumChk
+        albumChkValueB <- stepper albumRipInitialValue =<< getCheckButtonActiveWhenClicked albumRip
 
         trackRipEs <- forM trackRips getCheckButtonClicked
         let trackRipsE = foldr1 (unionWith const) trackRipEs   
@@ -94,15 +109,29 @@ appActivate app stateVar = do
         isAllTrackRipsUncheckedE <- allTrackActiveStatus not trackRips trackRipsE
         let initialAllChecked = getAll . mconcat $ All <$> trackRipInitialValues
             initialAllUnchecked = getAll . mconcat $ All . not <$> trackRipInitialValues
-        liftIO $ print $ "initialAllChecked=" ++ show initialAllChecked
-        liftIO $ print $ "initialAllUnchecked=" ++ show initialAllUnchecked
         isAllTrackRipsCheckedB <- event2Behavior initialAllChecked isAllTrackRipsCheckedE
         isAllTrackRipsUncheckedB <- event2Behavior initialAllUnchecked isAllTrackRipsUncheckedE
         let inconsistentB = (&&) <$> fmap not isAllTrackRipsCheckedB <*> fmap not isAllTrackRipsUncheckedB 
-        sink albumChk [#inconsistent :== inconsistentB]
+        sink albumRip [#inconsistent :== inconsistentB]
         -- set album active true if all checked or false if all unchecked 
-        reactimate $ set albumChk [#active := True] <$ filterE id isAllTrackRipsCheckedE
-        reactimate $ set albumChk [#active := False] <$ filterE id isAllTrackRipsUncheckedE
+        reactimate $ set albumRip [#active := True] <$ filterE id isAllTrackRipsCheckedE
+        reactimate $ set albumRip [#active := False] <$ filterE id isAllTrackRipsUncheckedE
+    entryHandlingDefinition :: Int -> Text -> Entry -> MomentIO ()    
+    entryHandlingDefinition idx defText entry = do
+        -- changedE <- mapEventIO (\_ -> get entry #text) =<< signalE0 entry #changed 
+        -- reactimate 
+        --     $ (\t -> set entry [#text := t]) 
+        --     . (\t -> if null t then defText else t) 
+        --     . strip 
+        --     <$> changedE
+        on entry #changed $ do
+            position <- editableGetPosition entry
+            value <- (\t -> if Text.null t then defText else t) 
+                . strip 
+                <$> get entry #text
+            set entry [#text := value]
+            editableSetPosition entry $ if position >= fromIntegral (Text.length value) then -1 else position
+
         return ()
     getCheckButtonClicked :: CheckButton -> MomentIO (Event ())
     getCheckButtonClicked = flip signalE0 #clicked
@@ -118,7 +147,6 @@ appActivate app stateVar = do
         return (b', e1', e2')
       where
         getWidgetFrom GridChild {..} = widget 
-    event2Behavior initial = stepper initial
 data GridChild = GridChild 
         { left :: Int32
         , top :: Int32
