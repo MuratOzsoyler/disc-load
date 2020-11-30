@@ -12,6 +12,8 @@ import Turtle ((<.>), (%), (</>), echo, ExitCode (..), FilePath, Format, format,
               )
 import UI.Types
 import System.IO.Unsafe (unsafePerformIO)
+import GI.Gtk (ManagedPtr, GObject, TypedObject, ManagedPtrNewtype, castTo)
+import Reactive.Banana (Behavior, Event, MonadMoment, stepper)
 
 unicodeReplChar :: Char
 unicodeReplChar = '\xFFFD'
@@ -119,3 +121,20 @@ fileExists = unsafePerformIO . testfile
 
 optionsParser :: Parser (Maybe FilePath)
 optionsParser = optional $ optPath "work-dir" 'd' "Working directory"
+
+mkPlaceHolder :: Text -> Text -> Text
+mkPlaceHolder typ fld = "Enter \"" <> fld <> "\" for " <> typ
+
+as 
+    :: (MonadIO f
+       , ManagedPtrNewtype o
+       , TypedObject o
+       , GObject b
+       ) 
+    => o 
+    -> (ManagedPtr b -> b) 
+    -> f b
+as s t = fromJust <$> liftIO (castTo t s)
+
+event2Behavior :: MonadMoment m => a -> Event a -> m (Behavior a)
+event2Behavior = stepper

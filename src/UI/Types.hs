@@ -21,7 +21,7 @@ data InputState = InputState
         , expandFillIdx :: Int
         , inputResult :: InputResult
         }
-        -- deriving Show
+        deriving Show
 
 emptyInputState :: InputState
 emptyInputState = InputState emptyItemInfo empty {- id -} 0 InputResultSkipDisc
