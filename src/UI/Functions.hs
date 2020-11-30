@@ -3,7 +3,7 @@ module UI.Functions where
 import Prelude as Prelude
 
 import Control.Applicative (Alternative((<|>)))
-import Control.Concurrent (modifyMVar, MVar, readMVar, newMVar)
+import Control.Concurrent (modifyMVar_, modifyMVar, MVar, readMVar, newMVar)
 import Control.Monad (forM, forM_, void)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Data.Functor (($>))
@@ -19,7 +19,7 @@ import Data.Vector.Mutable as MVector (modify)
 import System.IO.Unsafe (unsafePerformIO)
 
 import GI.Gio (applicationRun)
-import GI.Gtk (get, set, editableSetPosition, editableGetPosition
+import GI.Gtk (Button (Button), get, set, editableSetPosition, editableGetPosition
               , CheckButton (CheckButton), Orientation(OrientationHorizontal)
               , toWidget, Separator (Separator), Box (Box),  Widget, Align(..)
               , Entry (Entry), Label (Label), Grid (Grid)
@@ -35,6 +35,7 @@ import Turtle ((%), d, s, format)
 import DiscHandling.Utils (defaultTrackTitle, defaultAlbumArtist, defaultAlbumTitle, event2Behavior, as, i99, mkPlaceHolder)
 import UI.Types (ItemInfo (..), InputState (..))
 import Data.Char (isSpace)
+import Data.List.Extra (snoc)
 
 runInput :: InputState -> IO InputState
 runInput input = do
@@ -74,6 +75,7 @@ appActivate app stateVar = do
         . zip [0..] 
         <$> (sequenceA [headerRow, albumSeparator, albumRow albumInfo, tracksSeparator]
             <> forM (zip [1..] $ toList trackInfos) trackRow
+            <> buttonRow
             )
     forM_ (concat gridLines) $ \GridChild {..} -> #attach grid widget left top width height
     let entryRows = takeEnd 3 <$> filter ((>= 3) . Prelude.length) gridLines
@@ -105,7 +107,7 @@ appActivate app stateVar = do
         trackRipInitialValues <- forM trackRips $ flip get #active
         albumChkValueB <- stepper albumRipInitialValue =<< getCheckButtonActiveWhenClicked albumRip
 
-        trackRipEs <- forM trackRips getCheckButtonClicked
+        trackRipEs <- forM (zip [0..] trackRips) trackCheckButtonHandling -- getCheckButtonClicked
         let trackRipsE = foldr1 (unionWith const) trackRipEs   
         -- setting track rips with album rip value 
         forM_ trackRips $ flip sink [#active :== albumChkValueB]
@@ -158,6 +160,15 @@ appActivate app stateVar = do
         return ()
     getCheckButtonClicked :: CheckButton -> MomentIO (Event ())
     getCheckButtonClicked = flip signalE0 #clicked
+    trackCheckButtonHandling (idx, cb) = do
+        on cb #toggled $ do
+            value <- get cb #active
+            let modifyItemInfo info@ItemInfo {..} = info { rip = value }
+                modifyMVector mv = MVector.modify mv modifyItemInfo idx
+            void $ modifyMVar_ stateVar $ \state@InputState {..} ->
+                return state 
+                    { trackInfos = Vector.modify modifyMVector trackInfos }
+        getCheckButtonClicked cb
     getCheckButtonActiveWhenClicked :: CheckButton -> MomentIO (Event Bool)
     getCheckButtonActiveWhenClicked cb = mapEventIO (\_ -> get cb #active) =<< getCheckButtonClicked cb
     allTrackActiveStatus f rips = mapEventIO  (\_ -> getAll . mconcat <$> forM rips (fmap (All . f) <$> flip get #active))
@@ -215,6 +226,19 @@ trackRow (idx, info) = do
     wdt <- toWidget =<< new Label [#label := format i99 idx]
     (GridChild 0 0 1 1 wdt :) <$> itemRow "track" 1 info
 
+buttonRow :: MonadIO m => m [[GridChild]]
+buttonRow = 
+    sequenceA 
+        [ sequenceA
+            [ GridChild 0 0 4 1 <$> do
+                box <- new Box [#hexpand := False, #halign := AlignCenter, #spacing := 10]
+                ok <- new Button [#label := "Rip Disc"]
+                cancel <- new Button [#label := "Skip Disc"]
+                #packEnd box ok False False 0
+                #packEnd box cancel False False 0
+                toWidget box
+            ]
+        ]
 itemRow 
     :: MonadIO m 
     => Text 
