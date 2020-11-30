@@ -123,12 +123,6 @@ appActivate app stateVar = do
         reactimate $ set albumRip [#active := False] <$ filterE id isAllTrackRipsUncheckedE
     entryHandlingDefinition :: EntryType -> Text -> Entry -> MomentIO ()    
     entryHandlingDefinition entryType defText entry = do
-        -- changedE <- mapEventIO (\_ -> get entry #text) =<< signalE0 entry #changed 
-        -- reactimate 
-        --     $ (\t -> set entry [#text := t]) 
-        --     . (\t -> if null t then defText else t) 
-        --     . strip 
-        --     <$> changedE
         let idx = case entryType of
                 TrackTitle i -> i
                 TrackFrom i -> i
@@ -141,10 +135,10 @@ appActivate app stateVar = do
                     TrackTitle _ -> title $ trackInfos ! idx
                     TrackFrom _ -> from $ trackInfos ! idx
             position <- editableGetPosition entry
-            let conditionalStrip newValue =
-                    if oldValue == Text.init newValue && isSpace (Text.last newValue) 
-                        then newValue 
-                        else strip newValue 
+            let conditionalStrip newValue
+                    | Text.null newValue = newValue
+                    | oldValue == Text.init newValue && isSpace (Text.last newValue) = newValue 
+                    | otherwise = strip newValue 
             value <- (\t -> if Text.null t then defText else t) 
                 . conditionalStrip 
                 <$> get entry #text
