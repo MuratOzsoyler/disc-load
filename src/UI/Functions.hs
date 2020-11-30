@@ -3,7 +3,7 @@ module UI.Functions where
 import Prelude as Prelude
 
 import Control.Applicative (Alternative((<|>)))
-import Control.Concurrent (MVar, readMVar, newMVar)
+import Control.Concurrent (modifyMVar, MVar, readMVar, newMVar)
 import Control.Monad (forM, forM_, void)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Data.Functor (($>))
@@ -12,9 +12,10 @@ import Data.List (intercalate, uncons)
 import Data.List.Extra (takeEnd)
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Monoid (All(..))
-import Data.Text as Text (strip, length, null, unpack, Text)
+import Data.Text as Text (init, last, strip, length, null, unpack, Text)
 import Data.Tuple.Extra (thd3, snd3, fst3)
-import Data.Vector (toList)
+import Data.Vector as Vector ((!), modify, toList)
+import Data.Vector.Mutable as MVector (modify)
 import System.IO.Unsafe (unsafePerformIO)
 
 import GI.Gio (applicationRun)
@@ -33,6 +34,7 @@ import Turtle ((%), d, s, format)
 
 import DiscHandling.Utils (defaultTrackTitle, defaultAlbumArtist, defaultAlbumTitle, event2Behavior, as, i99, mkPlaceHolder)
 import UI.Types (ItemInfo (..), InputState (..))
+import Data.Char (isSpace)
 
 runInput :: InputState -> IO InputState
 runInput input = do
@@ -43,6 +45,9 @@ runInput input = do
     void $ applicationRun app Nothing
     
     readMVar stateVar
+
+data EntryType = AlbumTitle | AlbumFrom | TrackTitle Int | TrackFrom Int
+        deriving (Show, Eq)
 
 appActivate :: Application -> MVar InputState -> IO ()
 appActivate app stateVar = do
@@ -85,14 +90,14 @@ appActivate app stateVar = do
         ripHandlingDefinition albumRip trackRips
         defAlbumTitle <- defaultAlbumTitle
         -- entry sanitation
-        entryHandlingDefinition (-1) defAlbumTitle albumTitle
-        entryHandlingDefinition (-1) defaultAlbumArtist albumFrom
+        entryHandlingDefinition AlbumTitle defAlbumTitle albumTitle
+        entryHandlingDefinition AlbumFrom defaultAlbumArtist albumFrom
         let trackEntries = map (\(i, (_, t, f)) -> (i, t, f)) trackRowWidgets
             trackTitles = map (\(i, t, _) -> (i, t)) trackEntries
             trackFroms = map (\(i, _, f) -> (i, f)) trackEntries
         forM_ trackEntries $ \(i, t, f) -> do
-            entryHandlingDefinition i defaultTrackTitle t
-            entryHandlingDefinition i "" f
+            entryHandlingDefinition (TrackTitle i) defaultTrackTitle t
+            entryHandlingDefinition (TrackFrom i) "" f
 
         -- return ()
     ripHandlingDefinition albumRip trackRips = do
@@ -116,20 +121,44 @@ appActivate app stateVar = do
         -- set album active true if all checked or false if all unchecked 
         reactimate $ set albumRip [#active := True] <$ filterE id isAllTrackRipsCheckedE
         reactimate $ set albumRip [#active := False] <$ filterE id isAllTrackRipsUncheckedE
-    entryHandlingDefinition :: Int -> Text -> Entry -> MomentIO ()    
-    entryHandlingDefinition idx defText entry = do
+    entryHandlingDefinition :: EntryType -> Text -> Entry -> MomentIO ()    
+    entryHandlingDefinition entryType defText entry = do
         -- changedE <- mapEventIO (\_ -> get entry #text) =<< signalE0 entry #changed 
         -- reactimate 
         --     $ (\t -> set entry [#text := t]) 
         --     . (\t -> if null t then defText else t) 
         --     . strip 
         --     <$> changedE
+        let idx = case entryType of
+                TrackTitle i -> i
+                TrackFrom i -> i
+                _ -> -1
         on entry #changed $ do
+            state@InputState {..} <- readMVar stateVar
+            let oldValue = case entryType of
+                    AlbumTitle -> title albumInfo
+                    AlbumFrom -> from albumInfo
+                    TrackTitle _ -> title $ trackInfos ! idx
+                    TrackFrom _ -> from $ trackInfos ! idx
             position <- editableGetPosition entry
+            let conditionalStrip newValue =
+                    if oldValue == Text.init newValue && isSpace (Text.last newValue) 
+                        then newValue 
+                        else strip newValue 
             value <- (\t -> if Text.null t then defText else t) 
-                . strip 
+                . conditionalStrip 
                 <$> get entry #text
             set entry [#text := value]
+            let modifyTitle info = info { title = value }
+                modifyFrom info = info { from = value }
+                modifyIdx f vec =  MVector.modify vec f $ fromIntegral idx
+                modifyTrackInfos f = Vector.modify (modifyIdx f) trackInfos
+                state' = case entryType of
+                    AlbumTitle -> state { albumInfo = modifyTitle albumInfo }
+                    AlbumFrom -> state { albumInfo = modifyFrom albumInfo }
+                    TrackTitle _ -> state { trackInfos = modifyTrackInfos modifyTitle }
+                    TrackFrom _ -> state { trackInfos = modifyTrackInfos modifyFrom }
+            void $ modifyMVar stateVar $ \_ -> return (state', ()) 
             editableSetPosition entry $ if position >= fromIntegral (Text.length value) then -1 else position
 
         return ()
