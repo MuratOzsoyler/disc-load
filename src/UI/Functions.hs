@@ -19,7 +19,7 @@ import Data.Vector.Mutable as MVector (modify)
 import System.IO.Unsafe (unsafePerformIO)
 
 import GI.Gio (applicationRun)
-import GI.Gtk (Button (Button), get, set, editableSetPosition, editableGetPosition
+import GI.Gtk (AttrOp(On), Button (Button), get, set, editableSetPosition, editableGetPosition
               , CheckButton (CheckButton), Orientation(OrientationHorizontal)
               , toWidget, Separator (Separator), Box (Box),  Widget, Align(..)
               , Entry (Entry), Label (Label), Grid (Grid)
@@ -33,7 +33,7 @@ import Reactive.Banana.GI.Gtk (signalE0, AttrOpBehavior((:==)), sink, attrB, att
 import Turtle ((%), d, s, format)
 
 import DiscHandling.Utils (defaultTrackTitle, defaultAlbumArtist, defaultAlbumTitle, event2Behavior, as, i99, mkPlaceHolder)
-import UI.Types (ItemInfo (..), InputState (..))
+import UI.Types (InputResult (..), ItemInfo (..), InputState (..))
 import Data.Char (isSpace)
 import Data.List.Extra (snoc)
 
@@ -75,7 +75,7 @@ appActivate app stateVar = do
         . zip [0..] 
         <$> (sequenceA [headerRow, albumSeparator, albumRow albumInfo, tracksSeparator]
             <> forM (zip [1..] $ toList trackInfos) trackRow
-            <> buttonRow
+            <> buttonRow appWin stateVar
             )
     forM_ (concat gridLines) $ \GridChild {..} -> #attach grid widget left top width height
     let entryRows = takeEnd 3 <$> filter ((>= 3) . Prelude.length) gridLines
@@ -181,6 +181,7 @@ appActivate app stateVar = do
         return (b', e1', e2')
       where
         getWidgetFrom GridChild {..} = widget 
+
 data GridChild = GridChild 
         { left :: Int32
         , top :: Int32
@@ -226,19 +227,31 @@ trackRow (idx, info) = do
     wdt <- toWidget =<< new Label [#label := format i99 idx]
     (GridChild 0 0 1 1 wdt :) <$> itemRow "track" 1 info
 
-buttonRow :: MonadIO m => m [[GridChild]]
-buttonRow = 
+buttonRow :: MonadIO m => ApplicationWindow -> MVar InputState -> m [[GridChild]]
+buttonRow appWin stateVar = 
     sequenceA 
         [ sequenceA
             [ GridChild 0 0 4 1 <$> do
                 box <- new Box [#hexpand := False, #halign := AlignCenter, #spacing := 10]
-                ok <- new Button [#label := "Rip Disc"]
-                cancel <- new Button [#label := "Skip Disc"]
-                #packEnd box ok False False 0
-                #packEnd box cancel False False 0
+                ok <- new Button 
+                    [ #label := "Rip Disc"
+                    , On #clicked $ handler InputResultRipDisc
+                    ]
+                cancel <- new Button 
+                    [ #label := "Skip Disc"
+                    , On #clicked $ handler InputResultSkipDisc
+                    ]
+                #packStart box ok False False 0
+                #packStart box cancel False False 0
                 toWidget box
             ]
         ]
+  where
+    handler result = do
+        modifyMVar_ stateVar $ \state@InputState {..} ->
+            return state {inputResult = result}
+        #close appWin
+
 itemRow 
     :: MonadIO m 
     => Text 
