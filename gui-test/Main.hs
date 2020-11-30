@@ -43,8 +43,9 @@ printDiscOutput InputState {..} = do
     forM_ trackInfos printItemInfo 
 
 printItemInfo :: ItemInfo -> IO ()
-printItemInfo ItemInfo {..} = do
-    putStrLn 
-        $ "title=" <> pack (show title)
-        <> ", "
-        <> "from=" <> pack (show from)
+printItemInfo = print
+-- printItemInfo ItemInfo {..} = do
+--     putStrLn 
+--         $ "title=" <> pack (show title)
+--         <> ", "
+--         <> "from=" <> pack (show from)
