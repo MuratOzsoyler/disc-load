@@ -77,7 +77,7 @@ i99 = makeFormat fmt
     fmt = takeEnd 2 . ("00" <>)  . showText
 
 takeValue :: Text -> Text -> Text
-takeValue x y = fromJust $ toMaybe x <|> toMaybe y
+takeValue x y = fromJust $ toMaybe x <|> toMaybe y <|> Just ""
 
 toMaybe :: Text -> Maybe Text
 toMaybe x = if null x then Nothing else Just x
@@ -104,10 +104,24 @@ sanitize defaultAlbumTitle state@InputState {..} = state
     sanitizeEntity dft val = if null val then dft else strip val
 
 mkDirName :: ItemInfo -> FilePath
-mkDirName ItemInfo {..} = fromText from </> fromText title
+mkDirName ItemInfo {..}= mkDirName' title from
+
+mkDirName' :: Text -> Text -> FilePath
+mkDirName' title from = fromText from </> fromText title
 
 mkFileName :: Int -> FilePath -> Text -> ItemInfo -> FilePath
-mkFileName trackIdx dirName albumFrom ItemInfo {..} = dirName
+mkFileName trackIdx dirName albumFrom ItemInfo {..} = 
+    mkFileName' trackIdx dirName albumFrom title from
+
+mkFileName' 
+    :: (Show i, Integral i) 
+    => i 
+    -> FilePath 
+    -> Text 
+    -> Text 
+    -> Text 
+    -> FilePath
+mkFileName' trackIdx dirName albumFrom title from = dirName
     </> fromText
             (format (i99 % ". " % s % " - " % s) 
             trackIdx
