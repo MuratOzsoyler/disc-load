@@ -2,19 +2,27 @@ module Main where
 
 import Prelude hiding (putStrLn)
 import Control.Monad (forM_)
-import Data.Text (Text)
+import Data.Text (unpack, Text)
 import Data.Text.IO (putStrLn)
 
 import UI.Functions ( runInput )
 import UI.Types (emptyInputState,  InputState(..), ItemInfo(..) )
 import Data.Vector (fromList)
-import DiscHandling.Utils (showText)
+import DiscHandling.Utils (optionsParser, showText)
+import Turtle (toText, cd, options, IsString(fromString))
 
 programTitle :: Text
 programTitle = "Test Audio CD Ripper GUI"
 
 main :: IO ()
 main = do
+    mbwd <- options (fromString $ unpack programTitle) optionsParser
+    case mbwd of
+        Just wd -> do
+            cd wd
+            putStrLn $ "Changed to directory: '" <> either id id (toText wd) <> "'\n"
+        Nothing -> return ()
+
     let discInfo@InputState {..} = emptyInputState 
             { albumInfo = ItemInfo True "Üstad" "Münir Nurettin Selçuk" 
             , trackInfos = fromList
@@ -46,8 +54,3 @@ printDiscOutput InputState {..} = do
 
 printItemInfo :: ItemInfo -> IO ()
 printItemInfo = print
--- printItemInfo ItemInfo {..} = do
---     putStrLn 
---         $ "title=" <> pack (show title)
---         <> ", "
---         <> "from=" <> pack (show from)
