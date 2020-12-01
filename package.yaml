@@ -24,6 +24,7 @@ dependencies:
 - data-default-class
 - extra
 - gi-gio
+- gi-glib
 - gi-gtk
 - reactive-banana
 - reactive-banana-gi-gtk
