@@ -2,7 +2,7 @@ module Main where
 
 import Prelude hiding (putStrLn)
 import Control.Monad (forM_)
-import Data.Text (pack, Text)
+import Data.Text (Text)
 import Data.Text.IO (putStrLn)
 
 import UI.Functions ( runInput )
