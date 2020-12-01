@@ -21,6 +21,7 @@ import System.IO.Unsafe (unsafePerformIO)
 
 import GI.Gio (applicationRun)
 import GI.GLib (idleAdd)
+
 import GI.Gtk (toggleButtonGetActive, AttrOp(On), Button (Button), get, set, editableSetPosition, editableGetPosition
               , CheckButton (CheckButton), Orientation(OrientationHorizontal)
               , toWidget, Separator (Separator), Box (Box),  Widget, Align(..)
@@ -32,9 +33,9 @@ import GI.Gtk (toggleButtonGetActive, AttrOp(On), Button (Button), get, set, edi
 import Reactive.Banana (filterE, Event, stepper, unionWith)
 import Reactive.Banana.Frameworks (reactimate', changes, reactimate, mapEventIO, compile, actuate, MomentIO)
 import Reactive.Banana.GI.Gtk (signalE0, AttrOpBehavior((:==)), sink, attrB)
-import Turtle as Turtle((%), d, FilePath, format, fromText, s, testfile)
+import Turtle as Turtle((%), d, FilePath, format, s, testfile)
 
-import DiscHandling.Utils (mkDirName', mkFileName', shellQuote, defaultTrackTitle
+import DiscHandling.Utils (mkDirName', mkFileName', defaultTrackTitle
                           , defaultAlbumArtist, defaultAlbumTitle, event2Behavior
                           , as, i99, mkPlaceHolder
                           )
@@ -56,6 +57,7 @@ data EntryType = AlbumTitle | AlbumFrom | TrackTitle Int | TrackFrom Int
         deriving (Show, Eq)
 
 data FileTest = FileTest {idx :: Int, path :: Turtle.FilePath}
+        deriving Show
 
 appActivate :: Application -> MVar InputState -> IO ()
 appActivate app stateVar = do
@@ -95,7 +97,7 @@ appActivate app stateVar = do
         trackRips <- sequenceA $ getGridChildWidgetAs CheckButton . head <$> trackRows
         return $ do
             fileTest <- modifyMVar checkVar $ \checks -> 
-                return (drop 1 checks, listToMaybe checks) 
+                return (drop 1 checks, listToMaybe checks)
             case fileTest of
                 Nothing -> return ()
                 Just FileTest {..} -> do
@@ -103,7 +105,7 @@ appActivate app stateVar = do
                     set (trackRips !! idx) [#active := not exists]
                     allActive <- checkAllTracksActive id trackRips
                     allInactive <- checkAllTracksActive not trackRips
-                    let inconsistent = not allActive || not allInactive
+                    let inconsistent = not allActive && not allInactive
                     set albumRip [ #inconsistent := inconsistent]
                     unless inconsistent $ set albumRip [#active := allActive]
             return True
