@@ -4,38 +4,43 @@ import Prelude as Prelude
 
 import Control.Applicative (Alternative((<|>)))
 import Control.Concurrent (modifyMVar_, modifyMVar, MVar, readMVar, newMVar)
-import Control.Monad (forM, forM_, void)
-import Control.Monad.IO.Class (liftIO, MonadIO)
+import Control.Monad (forM, forM_, unless, void)
+import Control.Monad.IO.Class (MonadIO)
+import Data.Char (isSpace)
 import Data.Functor (($>))
 import Data.Int (Int32)
 import Data.List (intercalate, uncons)
-import Data.List.Extra (takeEnd)
-import Data.Maybe (fromJust, fromMaybe)
+import Data.List.Extra (snoc, takeEnd)
+import Data.Maybe (listToMaybe, fromJust, fromMaybe)
 import Data.Monoid (All(..))
-import Data.Text as Text (replicate, init, last, strip, length, null, unpack, Text)
-import Data.Tuple.Extra (thd3, snd3, fst3)
+import Data.Text as Text (init, last, strip, length, null, unpack, Text)
+import Data.Tuple.Extra (fst3)
 import Data.Vector as Vector ((!), modify, toList)
 import Data.Vector.Mutable as MVector (modify)
 import System.IO.Unsafe (unsafePerformIO)
 
 import GI.Gio (applicationRun)
-import GI.Gtk (AttrOp(On), Button (Button), get, set, editableSetPosition, editableGetPosition
+import GI.GLib (idleAdd)
+import GI.Gtk (toggleButtonGetActive, AttrOp(On), Button (Button), get, set, editableSetPosition, editableGetPosition
               , CheckButton (CheckButton), Orientation(OrientationHorizontal)
               , toWidget, Separator (Separator), Box (Box),  Widget, Align(..)
               , Entry (Entry), Label (Label), Grid (Grid)
               , PolicyType(PolicyTypeAutomatic), ScrolledWindow (ScrolledWindow)
               , ApplicationWindow (ApplicationWindow), on, AttrOp((:=), (:=>)), new
-              , Application(Application), castTo
+              , Application(Application), castTo, GObject, ManagedPtr, ManagedPtrNewtype
               )
-import Reactive.Banana (unions, filterE, Event, (<@), stepper, unionWith, accumB, whenE)
-import Reactive.Banana.Frameworks (liftIOLater, imposeChanges, fromAddHandler, AddHandler, newAddHandler, newEvent, reactimate', changes, reactimate, mapEventIO, compile, actuate, MomentIO)
-import Reactive.Banana.GI.Gtk (signalE0, AttrOpBehavior((:==)), sink, attrB, attrE)
-import Turtle (testfile, encodeString, (&), (</>), fromText, (%), d, s, format)
+import Reactive.Banana (filterE, Event, stepper, unionWith)
+import Reactive.Banana.Frameworks (reactimate', changes, reactimate, mapEventIO, compile, actuate, MomentIO)
+import Reactive.Banana.GI.Gtk (signalE0, AttrOpBehavior((:==)), sink, attrB)
+import Turtle as Turtle((%), d, FilePath, format, fromText, s, testfile)
 
-import DiscHandling.Utils (mkDirName', mkDirName, mkFileName', mkFileName, shellQuote, defaultTrackTitle, defaultAlbumArtist, defaultAlbumTitle, event2Behavior, as, i99, mkPlaceHolder)
+import DiscHandling.Utils (mkDirName', mkFileName', shellQuote, defaultTrackTitle
+                          , defaultAlbumArtist, defaultAlbumTitle, event2Behavior
+                          , as, i99, mkPlaceHolder
+                          )
 import UI.Types (InputResult (..), ItemInfo (..), InputState (..))
-import Data.Char (isSpace)
-import Data.List.Extra (snoc)
+
+pRIORITY_DEFAULT_IDLE = 200 :: Int32
 
 runInput :: InputState -> IO InputState
 runInput input = do
@@ -49,6 +54,8 @@ runInput input = do
 
 data EntryType = AlbumTitle | AlbumFrom | TrackTitle Int | TrackFrom Int
         deriving (Show, Eq)
+
+data FileTest = FileTest {idx :: Int, path :: Turtle.FilePath}
 
 appActivate :: Application -> MVar InputState -> IO ()
 appActivate app stateVar = do
@@ -68,28 +75,62 @@ appActivate app stateVar = do
             ]
             -- , On #deleteEvent $ const (False, Closed)
         ]
-    InputState {..} <- readMVar stateVar
+    state@InputState {..} <- readMVar stateVar
 
-    gridLines <- 
+    gridLines <- setUpGridChildren appWin state 
+    attachGridChildren grid gridLines
+    let entryRows = takeEnd 3 <$> filter ((>= 3) . Prelude.length) gridLines
+    withAlbumTitleValue entryRows $ do
+        checkVar :: MVar [FileTest] <- newMVar []
+        idleAdd pRIORITY_DEFAULT_IDLE =<< testFileExistence entryRows checkVar
+        compile (networkDefinition entryRows checkVar) >>= actuate
+    #showAll appWin
+  where
+    getGridChildWidgetAs :: (GObject o, ManagedPtrNewtype o, MonadIO m) => (ManagedPtr o -> o) -> GridChild -> m o
+    getGridChildWidgetAs mptr (GridChild _ _ _ _ wgt) = wgt `as` mptr  
+    testFileExistence rows checkVar = do
+        let albumRow = head rows
+            trackRows = drop 1 rows
+        albumRip <- getGridChildWidgetAs CheckButton $ head albumRow
+        trackRips <- sequenceA $ getGridChildWidgetAs CheckButton . head <$> trackRows
+        return $ do
+            fileTest <- modifyMVar checkVar $ \checks -> 
+                return (drop 1 checks, listToMaybe checks) 
+            case fileTest of
+                Nothing -> return ()
+                Just FileTest {..} -> do
+                    exists <- testfile path
+                    set (trackRips !! idx) [#active := not exists]
+                    allActive <- checkAllTracksActive id trackRips
+                    allInactive <- checkAllTracksActive not trackRips
+                    let inconsistent = not allActive || not allInactive
+                    set albumRip [ #inconsistent := inconsistent]
+                    unless inconsistent $ set albumRip [#active := allActive]
+            return True
+
+    setUpGridChildren appWin InputState {..} = 
         fmap (\(i, gcs) -> (\gc@GridChild {..} -> gc { top = i }) <$> gcs) 
         . zip [0..] 
         <$> (sequenceA [headerRow, albumSeparator, albumRow albumInfo, tracksSeparator]
             <> forM (zip [1..] $ toList trackInfos) trackRow
             <> buttonRow appWin stateVar
             )
-    forM_ (concat gridLines) $ \GridChild {..} -> #attach grid widget left top width height
-    let entryRows = takeEnd 3 <$> filter ((>= 3) . Prelude.length) gridLines
-    (fstAddHandler :: AddHandler (), fstFire) <- newAddHandler
-    compile (networkDefinition fstAddHandler entryRows) >>= actuate
-    forM_ (zip entryRows (albumInfo : toList trackInfos)) $ \case
-        ([_, GridChild _ _ _ _ t, GridChild _ _ _ _ f], ItemInfo {..}) -> do
-            t `as` Entry >>= flip set [#text := title]
-            f `as` Entry >>= flip set [#text := from]
-        _ -> error "Unexpected gridline"
-    #showAll appWin
-  where
-    networkDefinition :: AddHandler () -> GridChildren -> MomentIO ()
-    networkDefinition fstAddHandler entryRows = do 
+    attachGridChildren :: Grid -> GridChildren -> IO ()
+    attachGridChildren grid gridLines = 
+        forM_ (concat gridLines) $ \GridChild {..} -> #attach grid widget left top width height
+    -- reloads first entry's text property inorder to fire file existence tests
+    withAlbumTitleValue :: GridChildren -> IO () -> IO () 
+    withAlbumTitleValue rows f = do
+        let fstRow = head rows
+            GridChild _ _ _ _ wgt = fstRow !! 1
+        fstEntry <- fromJust <$> castTo Entry wgt
+        value <- get fstEntry #text
+        set fstEntry [#text := "\65533"]
+        f
+        set fstEntry [#text := value]
+
+    networkDefinition :: GridChildren -> MVar [FileTest] -> MomentIO ()
+    networkDefinition entryRows checkVar = do 
         let (albumRow :: [GridChild], trackRows :: GridChildren) = fromJust $ uncons entryRows
         (albumRip, albumTitle, albumFrom) <- itemRowWidgets albumRow
         trackRowWidgets <- zip [0..] <$> forM trackRows itemRowWidgets
@@ -100,41 +141,25 @@ appActivate app stateVar = do
         entryHandlingDefinition AlbumTitle defAlbumTitle albumTitle
         entryHandlingDefinition AlbumFrom defaultAlbumArtist albumFrom
         let trackEntries = map (\(i, (_, t, f)) -> (i, t, f)) trackRowWidgets
-            trackTitles = map (\(i, t, _) -> (i, t)) trackEntries
-            trackFroms = map (\(i, _, f) -> (i, f)) trackEntries
+            -- trackTitles = map (\(i, t, _) -> (i, t)) trackEntries
+            -- trackFroms = map (\(i, _, f) -> (i, f)) trackEntries
         forM_ trackEntries $ \(i, t, f) -> do
             entryHandlingDefinition (TrackTitle i) defaultTrackTitle t
             entryHandlingDefinition (TrackFrom i) "" f
         -- file existence tests
-        fstE <- fromAddHandler fstAddHandler
         let fromTextB = flip attrB #text
-            chgE w =  (() <$) <$> attrE w #text
-            filePathFromTextB = (fmap (fromText . shellQuote) <$>) . fromTextB  
+            -- filePathFromTextB = (fmap (fromText . shellQuote) <$>) . fromTextB  
         albumTitleB <- fromTextB albumTitle
         albumFromB <- fromTextB albumFrom
         let dirNameB = mkDirName' <$> albumTitleB <*> albumFromB
-        dirNameChgE <- (<>) <$> chgE albumTitle <*> ((<>) <$> chgE albumFrom <*> pure fstE)
-        -- attrE albumTitle #text 
-        --     >>= event2Behavior "X"
-        --     >>= changes . flip imposeChanges dirNameChgE 
-        --     >>= reactimate' 
-        --         . fmap (fmap (putStrLn . ("xB=" ++) . unpack))
-        attrB albumTitle #text
-            >>= reactimate 
-            . fmap (putStrLn . ("xB=" ++) . unpack) 
-            . (<@ dirNameChgE ) 
-
         forM_ trackEntries $ \(i, t, f) -> do
             trackTitleB <- fromTextB t
             trackFromB <- fromTextB f
             let fileNameB = mkFileName' (i + 1) <$> dirNameB <*> albumFromB <*> trackTitleB <*> trackFromB
-            chgB <- changes fileNameB
-            let action path = do
-                    exists <- testfile path
-                    return ()
-                chgB' = flip fmap chgB $ \ft -> flip fmap ft $ \fn -> do
-                    putStrLn $ "tested fileName=\"" ++ encodeString fn ++ "\"" 
-            reactimate' chgB'
+            chgE <- changes fileNameB
+            reactimate'
+                $ fmap (\fn -> modifyMVar_ checkVar (\fts -> return $ snoc fts (FileTest i fn)))
+                <$> chgE
         -- return ()
     ripHandlingDefinition albumRip trackRips = do
         albumRipInitialValue <- get albumRip #active
@@ -206,7 +231,10 @@ appActivate app stateVar = do
         getCheckButtonClicked cb
     getCheckButtonActiveWhenClicked :: CheckButton -> MomentIO (Event Bool)
     getCheckButtonActiveWhenClicked cb = mapEventIO (\_ -> get cb #active) =<< getCheckButtonClicked cb
-    allTrackActiveStatus f rips = mapEventIO  (\_ -> getAll . mconcat <$> forM rips (fmap (All . f) <$> flip get #active))
+    allTrackActiveStatus :: (Bool -> Bool) -> [CheckButton] -> Event a -> MomentIO (Event Bool) 
+    allTrackActiveStatus f rips evt = mapEventIO (\_ -> checkAllTracksActive f rips) evt --  (\_ -> getAll . mconcat <$> forM rips (fmap (All . f) <$> flip get #active))
+    checkAllTracksActive :: MonadIO m => (Bool -> Bool) -> [CheckButton] -> m Bool
+    checkAllTracksActive f rips = getAll . mconcat <$> mapM ((All . f <$>) . toggleButtonGetActive) rips
     itemRowWidgets :: MonadIO m => [GridChild] -> m (CheckButton, Entry, Entry)
     itemRowWidgets row = do
         let [b, e1, e2] = row
@@ -304,7 +332,7 @@ inputEntry plcHolder value = new Entry
     [ #hexpand := True
     , #halign := AlignFill
     , #placeholderText := plcHolder
-    , #text := {- Text.replicate 100  -}"\65533" -- value
+    , #text := value
     , #valign := AlignCenter
     -- , onM #changed $ \entry -> do
     --     newVal <- get entry #text
