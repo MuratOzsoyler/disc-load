@@ -12,7 +12,7 @@ import Data.List (intercalate, uncons)
 import Data.List.Extra (takeEnd)
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Monoid (All(..))
-import Data.Text as Text (init, last, strip, length, null, unpack, Text)
+import Data.Text as Text (replicate, init, last, strip, length, null, unpack, Text)
 import Data.Tuple.Extra (thd3, snd3, fst3)
 import Data.Vector as Vector ((!), modify, toList)
 import Data.Vector.Mutable as MVector (modify)
@@ -27,12 +27,12 @@ import GI.Gtk (AttrOp(On), Button (Button), get, set, editableSetPosition, edita
               , ApplicationWindow (ApplicationWindow), on, AttrOp((:=), (:=>)), new
               , Application(Application), castTo
               )
-import Reactive.Banana (filterE, Event, (<@), stepper, unionWith, accumB, whenE)
-import Reactive.Banana.Frameworks (reactimate, mapEventIO, compile, actuate, MomentIO)
+import Reactive.Banana (unions, filterE, Event, (<@), stepper, unionWith, accumB, whenE)
+import Reactive.Banana.Frameworks (liftIOLater, imposeChanges, fromAddHandler, AddHandler, newAddHandler, newEvent, reactimate', changes, reactimate, mapEventIO, compile, actuate, MomentIO)
 import Reactive.Banana.GI.Gtk (signalE0, AttrOpBehavior((:==)), sink, attrB, attrE)
-import Turtle ((%), d, s, format)
+import Turtle (testfile, encodeString, (&), (</>), fromText, (%), d, s, format)
 
-import DiscHandling.Utils (defaultTrackTitle, defaultAlbumArtist, defaultAlbumTitle, event2Behavior, as, i99, mkPlaceHolder)
+import DiscHandling.Utils (mkDirName', mkDirName, mkFileName', mkFileName, shellQuote, defaultTrackTitle, defaultAlbumArtist, defaultAlbumTitle, event2Behavior, as, i99, mkPlaceHolder)
 import UI.Types (InputResult (..), ItemInfo (..), InputState (..))
 import Data.Char (isSpace)
 import Data.List.Extra (snoc)
@@ -79,12 +79,17 @@ appActivate app stateVar = do
             )
     forM_ (concat gridLines) $ \GridChild {..} -> #attach grid widget left top width height
     let entryRows = takeEnd 3 <$> filter ((>= 3) . Prelude.length) gridLines
-    print entryRows
-    compile (networkDefinition entryRows) >>= actuate
+    (fstAddHandler :: AddHandler (), fstFire) <- newAddHandler
+    compile (networkDefinition fstAddHandler entryRows) >>= actuate
+    forM_ (zip entryRows (albumInfo : toList trackInfos)) $ \case
+        ([_, GridChild _ _ _ _ t, GridChild _ _ _ _ f], ItemInfo {..}) -> do
+            t `as` Entry >>= flip set [#text := title]
+            f `as` Entry >>= flip set [#text := from]
+        _ -> error "Unexpected gridline"
     #showAll appWin
   where
-    networkDefinition :: GridChildren -> MomentIO ()
-    networkDefinition entryRows = do 
+    networkDefinition :: AddHandler () -> GridChildren -> MomentIO ()
+    networkDefinition fstAddHandler entryRows = do 
         let (albumRow :: [GridChild], trackRows :: GridChildren) = fromJust $ uncons entryRows
         (albumRip, albumTitle, albumFrom) <- itemRowWidgets albumRow
         trackRowWidgets <- zip [0..] <$> forM trackRows itemRowWidgets
@@ -100,7 +105,36 @@ appActivate app stateVar = do
         forM_ trackEntries $ \(i, t, f) -> do
             entryHandlingDefinition (TrackTitle i) defaultTrackTitle t
             entryHandlingDefinition (TrackFrom i) "" f
+        -- file existence tests
+        fstE <- fromAddHandler fstAddHandler
+        let fromTextB = flip attrB #text
+            chgE w =  (() <$) <$> attrE w #text
+            filePathFromTextB = (fmap (fromText . shellQuote) <$>) . fromTextB  
+        albumTitleB <- fromTextB albumTitle
+        albumFromB <- fromTextB albumFrom
+        let dirNameB = mkDirName' <$> albumTitleB <*> albumFromB
+        dirNameChgE <- (<>) <$> chgE albumTitle <*> ((<>) <$> chgE albumFrom <*> pure fstE)
+        -- attrE albumTitle #text 
+        --     >>= event2Behavior "X"
+        --     >>= changes . flip imposeChanges dirNameChgE 
+        --     >>= reactimate' 
+        --         . fmap (fmap (putStrLn . ("xB=" ++) . unpack))
+        attrB albumTitle #text
+            >>= reactimate 
+            . fmap (putStrLn . ("xB=" ++) . unpack) 
+            . (<@ dirNameChgE ) 
 
+        forM_ trackEntries $ \(i, t, f) -> do
+            trackTitleB <- fromTextB t
+            trackFromB <- fromTextB f
+            let fileNameB = mkFileName' (i + 1) <$> dirNameB <*> albumFromB <*> trackTitleB <*> trackFromB
+            chgB <- changes fileNameB
+            let action path = do
+                    exists <- testfile path
+                    return ()
+                chgB' = flip fmap chgB $ \ft -> flip fmap ft $ \fn -> do
+                    putStrLn $ "tested fileName=\"" ++ encodeString fn ++ "\"" 
+            reactimate' chgB'
         -- return ()
     ripHandlingDefinition albumRip trackRips = do
         albumRipInitialValue <- get albumRip #active
@@ -114,8 +148,8 @@ appActivate app stateVar = do
         -- setting album rip inconsistent according to all track rips
         isAllTrackRipsCheckedE <- allTrackActiveStatus id trackRips trackRipsE
         isAllTrackRipsUncheckedE <- allTrackActiveStatus not trackRips trackRipsE
-        let initialAllChecked = getAll . mconcat $ All <$> trackRipInitialValues
-            initialAllUnchecked = getAll . mconcat $ All . not <$> trackRipInitialValues
+        let initialAllChecked = allChecked id trackRipInitialValues
+            initialAllUnchecked = allChecked not trackRipInitialValues
         isAllTrackRipsCheckedB <- event2Behavior initialAllChecked isAllTrackRipsCheckedE
         isAllTrackRipsUncheckedB <- event2Behavior initialAllUnchecked isAllTrackRipsUncheckedE
         let inconsistentB = (&&) <$> fmap not isAllTrackRipsCheckedB <*> fmap not isAllTrackRipsUncheckedB 
@@ -123,6 +157,7 @@ appActivate app stateVar = do
         -- set album active true if all checked or false if all unchecked 
         reactimate $ set albumRip [#active := True] <$ filterE id isAllTrackRipsCheckedE
         reactimate $ set albumRip [#active := False] <$ filterE id isAllTrackRipsUncheckedE
+    allChecked f = getAll . mconcat . (All . f <$>) 
     entryHandlingDefinition :: EntryType -> Text -> Entry -> MomentIO ()    
     entryHandlingDefinition entryType defText entry = do
         let idx = case entryType of
@@ -269,7 +304,7 @@ inputEntry plcHolder value = new Entry
     [ #hexpand := True
     , #halign := AlignFill
     , #placeholderText := plcHolder
-    , #text := value
+    , #text := {- Text.replicate 100  -}"\65533" -- value
     , #valign := AlignCenter
     -- , onM #changed $ \entry -> do
     --     newVal <- get entry #text
