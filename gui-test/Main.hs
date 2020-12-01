@@ -8,6 +8,7 @@ import Data.Text.IO (putStrLn)
 import UI.Functions ( runInput )
 import UI.Types (emptyInputState,  InputState(..), ItemInfo(..) )
 import Data.Vector (fromList)
+import DiscHandling.Utils (showText)
 
 programTitle :: Text
 programTitle = "Test Audio CD Ripper GUI"
@@ -37,14 +38,16 @@ main = do
 
 printDiscOutput :: InputState -> IO ()
 printDiscOutput InputState {..} = do
+    putStrLn $ "inputResult =" <> showText inputResult
     putStrLn "Album Info"
     printItemInfo albumInfo
     putStrLn "Track Infos"
     forM_ trackInfos printItemInfo 
 
 printItemInfo :: ItemInfo -> IO ()
-printItemInfo ItemInfo {..} = do
-    putStrLn 
-        $ "title=" <> pack (show title)
-        <> ", "
-        <> "from=" <> pack (show from)
+printItemInfo = print
+-- printItemInfo ItemInfo {..} = do
+--     putStrLn 
+--         $ "title=" <> pack (show title)
+--         <> ", "
+--         <> "from=" <> pack (show from)
