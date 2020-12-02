@@ -34,7 +34,7 @@ import Reactive.Banana.Frameworks (reactimate', changes, reactimate, mapEventIO,
 import Reactive.Banana.GI.Gtk (signalE0, AttrOpBehavior((:==)), sink, attrB)
 import Turtle as Turtle(FilePath, format, testfile)
 
-import DiscHandling.Utils (mkDirName', mkFileName', defaultTrackTitle
+import DiscHandling.Utils (gridChildWidgetAs, mkDirName', mkFileName', defaultTrackTitle
                           , defaultAlbumArtist, defaultAlbumTitle, event2Behavior
                           , as, i99, mkPlaceHolder
                           )
@@ -330,6 +330,3 @@ separatorRow gTitle = sequenceA
             ] >>= \s -> #packStart box s True True 1
         toWidget box
     ]
-
-gridChildWidgetAs :: (GObject o, ManagedPtrNewtype o, MonadIO m) => (ManagedPtr o -> o) -> GridChild -> m o
-gridChildWidgetAs mptr GridChild {..} = widget `as` mptr  

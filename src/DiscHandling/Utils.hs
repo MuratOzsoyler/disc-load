@@ -152,3 +152,10 @@ as s t = fromJust <$> liftIO (castTo t s)
 
 event2Behavior :: MonadMoment m => a -> Event a -> m (Behavior a)
 event2Behavior = stepper
+
+gridChildWidgetAs 
+    :: (GObject o, ManagedPtrNewtype o, MonadIO m) 
+    => (ManagedPtr o -> o) 
+    -> GridChild 
+    -> m o
+gridChildWidgetAs mptr GridChild {..} = widget `as` mptr  
