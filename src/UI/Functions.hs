@@ -34,7 +34,7 @@ import Reactive.Banana.Frameworks (reactimate', changes, reactimate, mapEventIO,
 import Reactive.Banana.GI.Gtk (signalE0, AttrOpBehavior((:==)), sink, attrB)
 import Turtle as Turtle(FilePath, format, testfile)
 
-import Utils (gridChildWidgetAs, mkDirName', mkFileName', defaultTrackTitle
+import Utils (sanitize, gridChildWidgetAs, mkDirName', mkFileName', defaultTrackTitle
                           , defaultAlbumArtist, defaultAlbumTitle, event2Behavior
                           , i99, mkPlaceHolder
                           )
@@ -42,10 +42,12 @@ import Types (GridChildren, GridChild (..), InputResult (..), ItemInfo (..), Inp
 
 runInput :: InputState -> IO InputState
 runInput input = do
-    stateVar <- newMVar input
+    defAlbumTitle <- defaultAlbumTitle
+    let sanitized = sanitize defAlbumTitle input  
+    stateVar <- newMVar sanitized
 
     app <- new Application [#applicationId := "disc.load"]
-    void $ on app #activate $ appActivate app stateVar
+    void $ on app #activate $ appActivate app defAlbumTitle stateVar
     void $ applicationRun app Nothing
     putStrLn "app quitted"
     readMVar stateVar
@@ -56,8 +58,8 @@ data EntryType = AlbumTitle | AlbumFrom | TrackTitle Int | TrackFrom Int
 data FileTest = FileTest {idx :: Int, path :: Turtle.FilePath}
         deriving Show
 
-appActivate :: Application -> MVar InputState -> IO ()
-appActivate app stateVar = do
+appActivate :: Application -> Text -> MVar InputState -> IO ()
+appActivate app defAlbumTitle stateVar = do
     idleVar <- newMVar True
     grid <- new Grid
         [ #columnSpacing := 2
@@ -83,7 +85,7 @@ appActivate app stateVar = do
     withAlbumTitleValue entryRows $ do
         checkVar :: MVar [FileTest] <- newMVar []
         idleAdd PRIORITY_DEFAULT_IDLE =<< testFileExistence entryRows checkVar idleVar
-        compile (networkDefinition entryRows checkVar) >>= actuate
+        compile (networkDefinition defAlbumTitle entryRows checkVar) >>= actuate
     #showAll appWin
   where
     testFileExistence rows checkVar idleVar = do
@@ -127,14 +129,14 @@ appActivate app stateVar = do
         f
         set fstEntry [#text := value]
 
-    networkDefinition :: GridChildren -> MVar [FileTest] -> MomentIO ()
-    networkDefinition entryRows checkVar = do 
+    networkDefinition :: Text -> GridChildren -> MVar [FileTest] -> MomentIO ()
+    networkDefinition defAlbumTitle entryRows checkVar = do 
         let (albumRow :: [GridChild], trackRows :: GridChildren) = fromJust $ uncons entryRows
         (albumRip, albumTitle, albumFrom) <- itemRowWidgets albumRow
         trackRowWidgets <- zip [0..] <$> forM trackRows itemRowWidgets
         let trackRips = map (fst3 . snd) trackRowWidgets
         ripHandlingDefinition albumRip trackRips
-        defAlbumTitle <- defaultAlbumTitle
+        -- defAlbumTitle <- defaultAlbumTitle
         -- entry sanitation
         entryHandlingDefinition AlbumTitle defAlbumTitle albumTitle
         entryHandlingDefinition AlbumFrom defaultAlbumArtist albumFrom
