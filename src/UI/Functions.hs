@@ -1,47 +1,44 @@
+{-# LANGUAGE PatternSynonyms #-}
 module UI.Functions where
 
 import Prelude as Prelude
 
-import Control.Applicative (Alternative((<|>)))
 import Control.Concurrent (modifyMVar_, modifyMVar, MVar, readMVar, newMVar)
 import Control.Monad (forM, forM_, unless, void)
 import Control.Monad.IO.Class (MonadIO)
 import Data.Char (isSpace)
-import Data.Functor (($>))
 import Data.Int (Int32)
-import Data.List (intercalate, uncons)
+import Data.List (uncons)
 import Data.List.Extra (snoc, takeEnd)
-import Data.Maybe (listToMaybe, fromJust, fromMaybe)
+import Data.Maybe (listToMaybe, fromJust)
 import Data.Monoid (All(..))
-import Data.Text as Text (init, last, strip, length, null, unpack, Text)
+import Data.Text as Text (init, last, strip, length, null, Text)
 import Data.Tuple.Extra (fst3)
 import Data.Vector as Vector ((!), modify, toList)
 import Data.Vector.Mutable as MVector (modify)
-import System.IO.Unsafe (unsafePerformIO)
 
 import GI.Gio (applicationRun)
-import GI.GLib (idleAdd)
+import GI.GLib (idleAdd, pattern PRIORITY_DEFAULT_IDLE)
 
-import GI.Gtk (toggleButtonGetActive, AttrOp(On), Button (Button), get, set, editableSetPosition, editableGetPosition
+import GI.Gtk (toggleButtonGetActive, AttrOp(On), Button (Button), get, set
+              , editableSetPosition, editableGetPosition
               , CheckButton (CheckButton), Orientation(OrientationHorizontal)
-              , toWidget, Separator (Separator), Box (Box),  Widget, Align(..)
+              , toWidget, Separator (Separator), Box (Box), Align(..)
               , Entry (Entry), Label (Label), Grid (Grid)
               , PolicyType(PolicyTypeAutomatic), ScrolledWindow (ScrolledWindow)
               , ApplicationWindow (ApplicationWindow), on, AttrOp((:=), (:=>)), new
-              , Application(Application), castTo, GObject, ManagedPtr, ManagedPtrNewtype
+              , Application(Application), GObject, ManagedPtr, ManagedPtrNewtype
               )
 import Reactive.Banana (filterE, Event, stepper, unionWith)
 import Reactive.Banana.Frameworks (reactimate', changes, reactimate, mapEventIO, compile, actuate, MomentIO)
 import Reactive.Banana.GI.Gtk (signalE0, AttrOpBehavior((:==)), sink, attrB)
-import Turtle as Turtle((%), d, FilePath, format, s, testfile)
+import Turtle as Turtle(FilePath, format, testfile)
 
 import DiscHandling.Utils (mkDirName', mkFileName', defaultTrackTitle
                           , defaultAlbumArtist, defaultAlbumTitle, event2Behavior
                           , as, i99, mkPlaceHolder
                           )
-import UI.Types (InputResult (..), ItemInfo (..), InputState (..))
-
-pRIORITY_DEFAULT_IDLE = 200 :: Int32
+import UI.Types (GridChildren, GridChild (..), InputResult (..), ItemInfo (..), InputState (..))
 
 runInput :: InputState -> IO InputState
 runInput input = do
@@ -84,17 +81,15 @@ appActivate app stateVar = do
     let entryRows = takeEnd 3 <$> filter ((>= 3) . Prelude.length) gridLines
     withAlbumTitleValue entryRows $ do
         checkVar :: MVar [FileTest] <- newMVar []
-        idleAdd pRIORITY_DEFAULT_IDLE =<< testFileExistence entryRows checkVar
+        idleAdd PRIORITY_DEFAULT_IDLE =<< testFileExistence entryRows checkVar
         compile (networkDefinition entryRows checkVar) >>= actuate
     #showAll appWin
   where
-    getGridChildWidgetAs :: (GObject o, ManagedPtrNewtype o, MonadIO m) => (ManagedPtr o -> o) -> GridChild -> m o
-    getGridChildWidgetAs mptr (GridChild _ _ _ _ wgt) = wgt `as` mptr  
     testFileExistence rows checkVar = do
         let albumRow = head rows
             trackRows = drop 1 rows
-        albumRip <- getGridChildWidgetAs CheckButton $ head albumRow
-        trackRips <- sequenceA $ getGridChildWidgetAs CheckButton . head <$> trackRows
+        albumRip <- gridChildWidgetAs CheckButton $ head albumRow
+        trackRips <- sequenceA $ gridChildWidgetAs CheckButton . head <$> trackRows
         return $ do
             fileTest <- modifyMVar checkVar $ \checks -> 
                 return (drop 1 checks, listToMaybe checks)
@@ -106,7 +101,7 @@ appActivate app stateVar = do
                     allActive <- checkAllTracksActive id trackRips
                     allInactive <- checkAllTracksActive not trackRips
                     let inconsistent = not allActive && not allInactive
-                    set albumRip [ #inconsistent := inconsistent]
+                    set albumRip [#inconsistent := inconsistent]
                     unless inconsistent $ set albumRip [#active := allActive]
             return True
 
@@ -117,15 +112,15 @@ appActivate app stateVar = do
             <> forM (zip [1..] $ toList trackInfos) trackRow
             <> buttonRow appWin stateVar
             )
+            
     attachGridChildren :: Grid -> GridChildren -> IO ()
     attachGridChildren grid gridLines = 
         forM_ (concat gridLines) $ \GridChild {..} -> #attach grid widget left top width height
+
     -- reloads first entry's text property inorder to fire file existence tests
     withAlbumTitleValue :: GridChildren -> IO () -> IO () 
     withAlbumTitleValue rows f = do
-        let fstRow = head rows
-            GridChild _ _ _ _ wgt = fstRow !! 1
-        fstEntry <- fromJust <$> castTo Entry wgt
+        fstEntry <- gridChildWidgetAs Entry $ head rows !! 1
         value <- get fstEntry #text
         set fstEntry [#text := "\65533"]
         f
@@ -162,7 +157,7 @@ appActivate app stateVar = do
             reactimate'
                 $ fmap (\fn -> modifyMVar_ checkVar (\fts -> return $ snoc fts (FileTest i fn)))
                 <$> chgE
-        -- return ()
+
     ripHandlingDefinition albumRip trackRips = do
         albumRipInitialValue <- get albumRip #active
         trackRipInitialValues <- forM trackRips $ flip get #active
@@ -184,7 +179,9 @@ appActivate app stateVar = do
         -- set album active true if all checked or false if all unchecked 
         reactimate $ set albumRip [#active := True] <$ filterE id isAllTrackRipsCheckedE
         reactimate $ set albumRip [#active := False] <$ filterE id isAllTrackRipsUncheckedE
+        
     allChecked f = getAll . mconcat . (All . f <$>) 
+    
     entryHandlingDefinition :: EntryType -> Text -> Entry -> MomentIO ()    
     entryHandlingDefinition entryType defText entry = do
         let idx = case entryType of
@@ -220,8 +217,10 @@ appActivate app stateVar = do
             editableSetPosition entry $ if position >= fromIntegral (Text.length value) then -1 else position
 
         return ()
+        
     getCheckButtonClicked :: CheckButton -> MomentIO (Event ())
     getCheckButtonClicked = flip signalE0 #clicked
+    
     trackCheckButtonHandling (idx, cb) = do
         on cb #toggled $ do
             value <- get cb #active
@@ -231,46 +230,23 @@ appActivate app stateVar = do
                 return state 
                     { trackInfos = Vector.modify modifyMVector trackInfos }
         getCheckButtonClicked cb
+        
     getCheckButtonActiveWhenClicked :: CheckButton -> MomentIO (Event Bool)
     getCheckButtonActiveWhenClicked cb = mapEventIO (\_ -> get cb #active) =<< getCheckButtonClicked cb
+    
     allTrackActiveStatus :: (Bool -> Bool) -> [CheckButton] -> Event a -> MomentIO (Event Bool) 
     allTrackActiveStatus f rips evt = mapEventIO (\_ -> checkAllTracksActive f rips) evt --  (\_ -> getAll . mconcat <$> forM rips (fmap (All . f) <$> flip get #active))
+    
     checkAllTracksActive :: MonadIO m => (Bool -> Bool) -> [CheckButton] -> m Bool
     checkAllTracksActive f rips = getAll . mconcat <$> mapM ((All . f <$>) . toggleButtonGetActive) rips
+
     itemRowWidgets :: MonadIO m => [GridChild] -> m (CheckButton, Entry, Entry)
     itemRowWidgets row = do
         let [b, e1, e2] = row
-        b' <- getWidgetFrom b `as` CheckButton
-        e1' <- getWidgetFrom e1 `as` Entry
-        e2' <- getWidgetFrom e2 `as` Entry
+        b' <- gridChildWidgetAs CheckButton b
+        e1' <- gridChildWidgetAs Entry e1
+        e2' <- gridChildWidgetAs Entry e2
         return (b', e1', e2')
-      where
-        getWidgetFrom GridChild {..} = widget 
-
-data GridChild = GridChild 
-        { left :: Int32
-        , top :: Int32
-        , width :: Int32
-        , height :: Int32
-        , widget :: Widget
-        }
-
-instance Show GridChild where
-    show GridChild {..} = '{' : intercalate ", " 
-            [ showIntFld "left" left
-            , showIntFld "top" top
-            , showIntFld "width" width
-            , showIntFld "height" height
-            , showWidget
-            ] ++ "}"
-      where
-        showIntFld name = unpack . format (s % ": " % d) name  
-        showWidget = unsafePerformIO $ do 
-            mbEntry <- ($> "Entry") <$> castTo Entry widget
-            mbCheckButton <- ($> "CheckButton") <$> castTo CheckButton widget
-            return $ fromMaybe "unknown widget" $ mbEntry <|> mbCheckButton
-
-type GridChildren = [[GridChild]]
         
 headerRow :: MonadIO m => m [GridChild]
 headerRow = sequenceA  
@@ -336,9 +312,6 @@ inputEntry plcHolder value = new Entry
     , #placeholderText := plcHolder
     , #text := value
     , #valign := AlignCenter
-    -- , onM #changed $ \entry -> do
-    --     newVal <- get entry #text
-    --     return $ EntryChanged $ strip newVal
     ]
 
 separatorRow :: MonadIO m => Text -> m [GridChild]
@@ -357,3 +330,6 @@ separatorRow gTitle = sequenceA
             ] >>= \s -> #packStart box s True True 1
         toWidget box
     ]
+
+gridChildWidgetAs :: (GObject o, ManagedPtrNewtype o, MonadIO m) => (ManagedPtr o -> o) -> GridChild -> m o
+gridChildWidgetAs mptr GridChild {..} = widget `as` mptr  
