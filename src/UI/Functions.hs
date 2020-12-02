@@ -27,7 +27,7 @@ import GI.Gtk (toggleButtonGetActive, AttrOp(On), Button (Button), get, set
               , Entry (Entry), Label (Label), Grid (Grid)
               , PolicyType(PolicyTypeAutomatic), ScrolledWindow (ScrolledWindow)
               , ApplicationWindow (ApplicationWindow), on, AttrOp((:=), (:=>)), new
-              , Application(Application)
+              , Application(Application), mainQuit
               )
 import Reactive.Banana (filterE, Event, stepper, unionWith)
 import Reactive.Banana.Frameworks (reactimate', changes, reactimate, mapEventIO, compile, actuate, MomentIO)
@@ -47,7 +47,7 @@ runInput input = do
     app <- new Application [#applicationId := "disc.load"]
     void $ on app #activate $ appActivate app stateVar
     void $ applicationRun app Nothing
-    
+    putStrLn "app quitted"
     readMVar stateVar
 
 data EntryType = AlbumTitle | AlbumFrom | TrackTitle Int | TrackFrom Int
@@ -58,6 +58,7 @@ data FileTest = FileTest {idx :: Int, path :: Turtle.FilePath}
 
 appActivate :: Application -> MVar InputState -> IO ()
 appActivate app stateVar = do
+    idleVar <- newMVar True
     grid <- new Grid
         [ #columnSpacing := 2
         , #hexpand := True
@@ -72,6 +73,7 @@ appActivate app stateVar = do
             , #vscrollbarPolicy := PolicyTypeAutomatic
             , #child := grid
             ]
+        , On #deleteEvent $ const $ modifyMVar idleVar $ const $ return (False, False)
         ]
     state@InputState {..} <- readMVar stateVar
 
@@ -80,11 +82,11 @@ appActivate app stateVar = do
     let entryRows = takeEnd 3 <$> filter ((>= 3) . Prelude.length) gridLines
     withAlbumTitleValue entryRows $ do
         checkVar :: MVar [FileTest] <- newMVar []
-        idleAdd PRIORITY_DEFAULT_IDLE =<< testFileExistence entryRows checkVar
+        idleAdd PRIORITY_DEFAULT_IDLE =<< testFileExistence entryRows checkVar idleVar
         compile (networkDefinition entryRows checkVar) >>= actuate
     #showAll appWin
   where
-    testFileExistence rows checkVar = do
+    testFileExistence rows checkVar idleVar = do
         let albumRow = head rows
             trackRows = drop 1 rows
         albumRip <- gridChildWidgetAs CheckButton $ head albumRow
@@ -102,7 +104,7 @@ appActivate app stateVar = do
                     let inconsistent = not allActive && not allInactive
                     set albumRip [#inconsistent := inconsistent]
                     unless inconsistent $ set albumRip [#active := allActive]
-            return True
+            readMVar idleVar
 
     setUpGridChildren appWin InputState {..} = 
         fmap (\(i, gcs) -> (\gc@GridChild {..} -> gc { top = i }) <$> gcs) 
