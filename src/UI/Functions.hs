@@ -20,14 +20,14 @@ import Data.Vector.Mutable as MVector (modify)
 import GI.Gio (applicationRun)
 import GI.GLib (idleAdd, pattern PRIORITY_DEFAULT_IDLE)
 
-import GI.Gtk (toggleButtonGetActive, AttrOp(On), Button (Button), get, set
+import GI.Gtk (PositionType (..), toggleButtonGetActive, AttrOp(On), Button (Button), get, set
               , editableSetPosition, editableGetPosition
               , CheckButton (CheckButton), Orientation(OrientationHorizontal)
               , toWidget, Separator (Separator), Box (Box), Align(..)
               , Entry (Entry), Label (Label), Grid (Grid)
               , PolicyType(PolicyTypeAutomatic), ScrolledWindow (ScrolledWindow)
               , ApplicationWindow (ApplicationWindow), on, AttrOp((:=), (:=>)), new
-              , Application(Application), mainQuit
+              , Application(Application)
               )
 import Reactive.Banana (filterE, Event, stepper, unionWith)
 import Reactive.Banana.Frameworks (reactimate', changes, reactimate, mapEventIO, compile, actuate, MomentIO)
@@ -273,6 +273,18 @@ buttonRow appWin stateVar =
     sequenceA 
         [ sequenceA
             [ GridChild 0 0 4 1 <$> do
+                grid <- new Grid
+                    [ #columnSpacing := 2
+                    , #hexpand := True
+                    , #margin := 4
+                    , #rowSpacing := 2
+                    ]
+                extract <- new Button 
+                    [ #label := "Extract Artists"
+                    , #halign := AlignStart
+                    , #hexpand := False
+                    ] 
+                #attach grid extract 0 0 1 1 
                 box <- new Box [#hexpand := False, #halign := AlignCenter, #spacing := 10]
                 ok <- new Button 
                     [ #label := "Rip Disc"
@@ -284,7 +296,8 @@ buttonRow appWin stateVar =
                     ]
                 #packStart box ok False False 0
                 #packStart box cancel False False 0
-                toWidget box
+                #attachNextTo grid box (Just extract) PositionTypeRight 1 1
+                toWidget grid
             ]
         ]
   where
