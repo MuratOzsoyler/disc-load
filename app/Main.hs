@@ -17,7 +17,8 @@ import Utils
       loadDisc,
       mkDirName,
       optionsParser,
-      shellQuote )
+      shellQuote, 
+      showText)
 import UI.Functions ( runInput )
 import UI.Interaction ( getContinueConfirm, promptDisc )
 import Types (InputResult(InputResultRipDisc),  InputState(..), ItemInfo(..) )
@@ -60,14 +61,15 @@ main = do
 
 printDiscOutput :: InputState -> IO ()
 printDiscOutput InputState {..} = do
+    putStrLn $ "inputResult=" <> showText inputResult 
     putStrLn "Album Info"
     printItemInfo albumInfo
     putStrLn "Track Infos"
     forM_ trackInfos printItemInfo 
 
 printItemInfo :: ItemInfo -> IO ()
-printItemInfo ItemInfo {..} = do
-    putStrLn 
-        $ "title=" <> pack (show title)
-        <> ", "
-        <> "from=" <> pack (show from)
+printItemInfo = print --ItemInfo {..} = do
+    -- putStrLn 
+    --     $ "title=" <> pack (show title)
+    --     <> ", "
+    --     <> "from=" <> pack (show from)

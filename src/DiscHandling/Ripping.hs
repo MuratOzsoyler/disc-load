@@ -41,16 +41,6 @@ writeTracks dirName albumFrom trackInfos = do
             "cdda2wav dev=/dev/cdrom -gui -cddb -1 -no-textfile -no-infofile -verbose-level disable -track " % d % " - | ffmpeg -i - " % s
         fileName = mkFileName trackIdx dirName albumFrom trackInfo  
         fileNameToText = either id id $ toText fileName
-        -- either id id (toText 
-        --     $ dirName
-        --     </> fromText
-        --             (format (i99 % ". " % s % " - " % s) 
-        --                 trackIdx
-        --                 (takeValue from albumFrom)
-        --                 title
-        --                 )
-        --     <.> "m4a"
-        --     )
         startOfTrackProcessing =
             echo 
                 $ fromJust . textToLine

@@ -141,14 +141,11 @@ appActivate app defAlbumTitle stateVar = do
         entryHandlingDefinition AlbumTitle defAlbumTitle albumTitle
         entryHandlingDefinition AlbumFrom defaultAlbumArtist albumFrom
         let trackEntries = map (\(i, (_, t, f)) -> (i, t, f)) trackRowWidgets
-            -- trackTitles = map (\(i, t, _) -> (i, t)) trackEntries
-            -- trackFroms = map (\(i, _, f) -> (i, f)) trackEntries
         forM_ trackEntries $ \(i, t, f) -> do
             entryHandlingDefinition (TrackTitle i) defaultTrackTitle t
             entryHandlingDefinition (TrackFrom i) "" f
         -- file existence tests
         let fromTextB = flip attrB #text
-            -- filePathFromTextB = (fmap (fromText . shellQuote) <$>) . fromTextB  
         albumTitleB <- fromTextB albumTitle
         albumFromB <- fromTextB albumFrom
         let dirNameB = mkDirName' <$> albumTitleB <*> albumFromB
