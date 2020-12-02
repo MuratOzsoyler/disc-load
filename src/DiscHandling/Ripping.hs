@@ -10,8 +10,8 @@ import Turtle (unsafeTextToLine, (%), d, echo, format
               , s, shellStrictWithErr, textToLine, toText
               ) 
 
-import UI.Types ( ItemInfo(..) )
-import DiscHandling.Utils (mkFileName,  shellQuote, showText )
+import Types ( ItemInfo(..) )
+import Utils (mkFileName,  shellQuote, showText )
 
 writeTracks :: MonadIO m => FilePath -> Text -> Vector ItemInfo -> m ()
 writeTracks dirName albumFrom trackInfos = do

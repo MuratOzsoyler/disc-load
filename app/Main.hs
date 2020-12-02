@@ -11,7 +11,7 @@ import Turtle (cd, echo, fromString, options, textToLine, toText)
 
 import DiscHandling.Inspection ( parseDiscInfo, readDiscInfo )
 import DiscHandling.Ripping ( writeTracks )
-import DiscHandling.Utils
+import Utils
     ( createDirectory,
       ejectDisc,
       loadDisc,
@@ -20,7 +20,7 @@ import DiscHandling.Utils
       shellQuote )
 import UI.Functions ( runInput )
 import UI.Interaction ( getContinueConfirm, promptDisc )
-import UI.Types (InputResult(InputResultRipDisc),  InputState(..), ItemInfo(..) )
+import Types (InputResult(InputResultRipDisc),  InputState(..), ItemInfo(..) )
 
 programTitle :: Text
 programTitle = "Audio CD Ripper"

@@ -1,4 +1,4 @@
-module DiscHandling.Utils where
+module Utils where
 
 import Prelude hiding (any, map, null, FilePath)
 import Control.Applicative ((<|>), optional)
@@ -10,8 +10,10 @@ import Data.Vector(map)
 import Turtle ((<.>), (%), (</>), echo, ExitCode (..), FilePath, Format, format, fromText
               , makeFormat, optPath, Parser, s, shell, testfile, unsafeTextToLine
               )
-import UI.Types
+import Types ( GridChild(..), InputState(..), ItemInfo(..) )
 import System.IO.Unsafe (unsafePerformIO)
+import GI.Gtk (ManagedPtr, GObject, TypedObject, ManagedPtrNewtype, castTo)
+import Reactive.Banana (Behavior, Event, MonadMoment, stepper)
 
 unicodeReplChar :: Char
 unicodeReplChar = '\xFFFD'
@@ -75,7 +77,7 @@ i99 = makeFormat fmt
     fmt = takeEnd 2 . ("00" <>)  . showText
 
 takeValue :: Text -> Text -> Text
-takeValue x y = fromJust $ toMaybe x <|> toMaybe y
+takeValue x y = fromJust $ toMaybe x <|> toMaybe y <|> Just ""
 
 toMaybe :: Text -> Maybe Text
 toMaybe x = if null x then Nothing else Just x
@@ -102,10 +104,24 @@ sanitize defaultAlbumTitle state@InputState {..} = state
     sanitizeEntity dft val = if null val then dft else strip val
 
 mkDirName :: ItemInfo -> FilePath
-mkDirName ItemInfo {..} = fromText from </> fromText title
+mkDirName ItemInfo {..}= mkDirName' title from
+
+mkDirName' :: Text -> Text -> FilePath
+mkDirName' title from = fromText from </> fromText title
 
 mkFileName :: Int -> FilePath -> Text -> ItemInfo -> FilePath
-mkFileName trackIdx dirName albumFrom ItemInfo {..} = dirName
+mkFileName trackIdx dirName albumFrom ItemInfo {..} = 
+    mkFileName' trackIdx dirName albumFrom title from
+
+mkFileName' 
+    :: (Show i, Integral i) 
+    => i 
+    -> FilePath 
+    -> Text 
+    -> Text 
+    -> Text 
+    -> FilePath
+mkFileName' trackIdx dirName albumFrom title from = dirName
     </> fromText
             (format (i99 % ". " % s % " - " % s) 
             trackIdx
@@ -119,3 +135,27 @@ fileExists = unsafePerformIO . testfile
 
 optionsParser :: Parser (Maybe FilePath)
 optionsParser = optional $ optPath "work-dir" 'd' "Working directory"
+
+mkPlaceHolder :: Text -> Text -> Text
+mkPlaceHolder typ fld = "Enter \"" <> fld <> "\" for " <> typ
+
+as 
+    :: (MonadIO f
+       , ManagedPtrNewtype o
+       , TypedObject o
+       , GObject b
+       ) 
+    => o 
+    -> (ManagedPtr b -> b) 
+    -> f b
+as s t = fromJust <$> liftIO (castTo t s)
+
+event2Behavior :: MonadMoment m => a -> Event a -> m (Behavior a)
+event2Behavior = stepper
+
+gridChildWidgetAs 
+    :: (GObject o, ManagedPtrNewtype o, MonadIO m) 
+    => (ManagedPtr o -> o) 
+    -> GridChild 
+    -> m o
+gridChildWidgetAs mptr GridChild {..} = widget `as` mptr  

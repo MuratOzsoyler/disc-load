@@ -11,7 +11,7 @@ import Text.Regex.Applicative.Text ((<|>), anySym, few, match, optional, psym, R
 import Turtle (echo, err, ExitCode (..), fold, Fold (..), Line, lineToText, select, Shell, unsafeTextToLine)
 import Turtle.Bytes (inshell, strict)
 
-import UI.Types
+import Types
     ( InputState(albumInfo, trackInfos),
       ItemInfo(ItemInfo),
       emptyInputState )
