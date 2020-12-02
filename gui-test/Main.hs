@@ -8,7 +8,7 @@ import Data.Text.IO (putStrLn)
 import UI.Functions ( runInput )
 import UI.Types (emptyInputState,  InputState(..), ItemInfo(..) )
 import Data.Vector (fromList)
-import DiscHandling.Utils (optionsParser, showText)
+import Utils (optionsParser, showText)
 import Turtle (toText, cd, options, IsString(fromString))
 
 programTitle :: Text

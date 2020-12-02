@@ -1,4 +1,4 @@
-module DiscHandling.Utils where
+module Utils where
 
 import Prelude hiding (any, map, null, FilePath)
 import Control.Applicative ((<|>), optional)

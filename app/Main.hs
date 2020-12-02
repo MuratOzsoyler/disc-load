@@ -11,7 +11,7 @@ import Turtle (cd, echo, fromString, options, textToLine, toText)
 
 import DiscHandling.Inspection ( parseDiscInfo, readDiscInfo )
 import DiscHandling.Ripping ( writeTracks )
-import DiscHandling.Utils
+import Utils
     ( createDirectory,
       ejectDisc,
       loadDisc,

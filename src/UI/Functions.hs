@@ -34,7 +34,7 @@ import Reactive.Banana.Frameworks (reactimate', changes, reactimate, mapEventIO,
 import Reactive.Banana.GI.Gtk (signalE0, AttrOpBehavior((:==)), sink, attrB)
 import Turtle as Turtle(FilePath, format, testfile)
 
-import DiscHandling.Utils (gridChildWidgetAs, mkDirName', mkFileName', defaultTrackTitle
+import Utils (gridChildWidgetAs, mkDirName', mkFileName', defaultTrackTitle
                           , defaultAlbumArtist, defaultAlbumTitle, event2Behavior
                           , as, i99, mkPlaceHolder
                           )
