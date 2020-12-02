@@ -10,7 +10,7 @@ import Data.Vector(map)
 import Turtle ((<.>), (%), (</>), echo, ExitCode (..), FilePath, Format, format, fromText
               , makeFormat, optPath, Parser, s, shell, testfile, unsafeTextToLine
               )
-import UI.Types
+import Types ( GridChild(..), InputState(..), ItemInfo(..) )
 import System.IO.Unsafe (unsafePerformIO)
 import GI.Gtk (ManagedPtr, GObject, TypedObject, ManagedPtrNewtype, castTo)
 import Reactive.Banana (Behavior, Event, MonadMoment, stepper)

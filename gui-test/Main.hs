@@ -6,7 +6,7 @@ import Data.Text (unpack, Text)
 import Data.Text.IO (putStrLn)
 
 import UI.Functions ( runInput )
-import UI.Types (emptyInputState,  InputState(..), ItemInfo(..) )
+import Types (emptyInputState,  InputState(..), ItemInfo(..) )
 import Data.Vector (fromList)
 import Utils (optionsParser, showText)
 import Turtle (toText, cd, options, IsString(fromString))

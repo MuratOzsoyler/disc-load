@@ -20,7 +20,7 @@ import Utils
       shellQuote )
 import UI.Functions ( runInput )
 import UI.Interaction ( getContinueConfirm, promptDisc )
-import UI.Types (InputResult(InputResultRipDisc),  InputState(..), ItemInfo(..) )
+import Types (InputResult(InputResultRipDisc),  InputState(..), ItemInfo(..) )
 
 programTitle :: Text
 programTitle = "Audio CD Ripper"

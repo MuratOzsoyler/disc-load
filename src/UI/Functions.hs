@@ -27,7 +27,7 @@ import GI.Gtk (toggleButtonGetActive, AttrOp(On), Button (Button), get, set
               , Entry (Entry), Label (Label), Grid (Grid)
               , PolicyType(PolicyTypeAutomatic), ScrolledWindow (ScrolledWindow)
               , ApplicationWindow (ApplicationWindow), on, AttrOp((:=), (:=>)), new
-              , Application(Application), GObject, ManagedPtr, ManagedPtrNewtype
+              , Application(Application)
               )
 import Reactive.Banana (filterE, Event, stepper, unionWith)
 import Reactive.Banana.Frameworks (reactimate', changes, reactimate, mapEventIO, compile, actuate, MomentIO)
@@ -36,9 +36,9 @@ import Turtle as Turtle(FilePath, format, testfile)
 
 import Utils (gridChildWidgetAs, mkDirName', mkFileName', defaultTrackTitle
                           , defaultAlbumArtist, defaultAlbumTitle, event2Behavior
-                          , as, i99, mkPlaceHolder
+                          , i99, mkPlaceHolder
                           )
-import UI.Types (GridChildren, GridChild (..), InputResult (..), ItemInfo (..), InputState (..))
+import Types (GridChildren, GridChild (..), InputResult (..), ItemInfo (..), InputState (..))
 
 runInput :: InputState -> IO InputState
 runInput input = do

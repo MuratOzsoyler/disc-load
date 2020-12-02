@@ -1,4 +1,4 @@
-module UI.Types where
+module Types where
 
 import Data.Int (Int32)
 import Data.Text (unpack, Text)
