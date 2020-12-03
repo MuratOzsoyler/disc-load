@@ -10,7 +10,7 @@ import Data.Vector(map)
 import Turtle ((<.>), (%), (</>), echo, ExitCode (..), FilePath, Format, format, fromText
               , makeFormat, optPath, Parser, s, shell, testfile, unsafeTextToLine
               )
-import Types ( GridChild(..), InputState(..), ItemInfo(..) )
+import Types ( InputState(..), ItemInfo(..) )
 import System.IO.Unsafe (unsafePerformIO)
 import GI.Gtk (ManagedPtr, GObject, TypedObject, ManagedPtrNewtype, castTo)
 import Reactive.Banana (Behavior, Event, MonadMoment, stepper)
@@ -152,10 +152,3 @@ as s t = fromJust <$> liftIO (castTo t s)
 
 event2Behavior :: MonadMoment m => a -> Event a -> m (Behavior a)
 event2Behavior = stepper
-
-gridChildWidgetAs 
-    :: (GObject o, ManagedPtrNewtype o, MonadIO m) 
-    => (ManagedPtr o -> o) 
-    -> GridChild 
-    -> m o
-gridChildWidgetAs mptr GridChild {..} = widget `as` mptr  
