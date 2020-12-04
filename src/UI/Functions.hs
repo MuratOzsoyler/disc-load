@@ -4,7 +4,7 @@ module UI.Functions where
 import Prelude as Prelude
 
 import Control.Concurrent (modifyMVar_, modifyMVar, MVar, readMVar, newMVar)
-import Control.Monad (forM_, forM, unless, void)
+import Control.Monad ((<=<), forM_, forM, unless, void, when)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.State as State (get, gets, modify, runStateT, StateT)
 import Control.Monad.Trans (MonadTrans(lift))
@@ -13,17 +13,20 @@ import Data.Int (Int32)
 import Data.List.Extra (snoc)
 import Data.Maybe (listToMaybe)
 import Data.Monoid (All(..))
-import Data.Text as Text (length, strip, last, init, null, Text)
-import Data.Vector as Vector ((!), modify, toList)
+import Data.Text as Text (drop, breakOn, length, strip, last, init, null, Text)
+import Data.Vector as Vector (length, (!), modify, toList)
 import Data.Vector.Mutable as MVector (modify)
 
 import GI.Gio (applicationRun)
 import GI.GLib (idleAdd, pattern PRIORITY_DEFAULT_IDLE)
 
-import GI.Gtk as Gtk (PositionType (..), toggleButtonGetActive, AttrOp(On), Button (Button), get, set
+import GI.Gtk as Gtk (Popover (Popover)
+                     , ArrowType(ArrowTypeDown), MenuButton (MenuButton)
+                     , PositionType (..), toggleButtonGetActive
+                     , AttrOp(On), Button (Button), get, set
                      , editableSetPosition, editableGetPosition
-                     , CheckButton (CheckButton), Orientation(OrientationHorizontal)
-                     , toWidget, Separator (Separator), Box (Box), Align(..)
+                     , CheckButton (CheckButton), Orientation(..)
+                     , Separator (Separator), Box (Box), Align(..)
                      , Entry (Entry), Label (Label), Grid (Grid)
                      , PolicyType(PolicyTypeAutomatic), ScrolledWindow (ScrolledWindow)
                      , ApplicationWindow (ApplicationWindow), on, AttrOp((:=), (:=>)), new
@@ -62,7 +65,7 @@ data FileTest = FileTest {idx :: Int, path :: Turtle.FilePath}
 
 type RowWidgets = (CheckButton, Entry, Entry)
 
-type Buttons = (Button, Button, Button)
+type Buttons = (MenuButton, Button, Button)
 
 data RenderConfig = RenderConfig
         { stateVar :: MVar InputState
@@ -147,12 +150,12 @@ appActivate app defAlbumTitle stVar = do
 startTestFileExistence :: RenderM IO (IO Bool)
 startTestFileExistence = do
     (albumRip, _, _) <- State.gets $ snd . (!! 0) . entryRows
-    trackRips <- State.gets $ fmap (fst3 . snd) . drop 1 . entryRows
+    trackRips <- State.gets $ fmap (fst3 . snd) . Prelude.drop 1 . entryRows
     checkVar <- asks fileTestVar
     idleVar <- asks idleRepeatVar
     return $ do
         fileTest <- modifyMVar checkVar $ \checks -> 
-            return (drop 1 checks, listToMaybe checks)
+            return (Prelude.drop 1 checks, listToMaybe checks)
         case fileTest of
             Nothing -> return ()
             Just FileTest {..} -> do
@@ -173,7 +176,7 @@ setUpGridChildren = do
     albumRow 2 albumInfo
     tracksSeparator 3
     forM_ (zip [0..] $ toList trackInfos) $ trackRow 4
-    buttonRow 5
+    buttonRow $ fromIntegral $ Vector.length trackInfos + 4
             
 -- reloads first entry's text property inorder to fire file existence tests
 withAlbumTitleValue :: RenderM IO () -> RenderM IO () 
@@ -187,7 +190,7 @@ withAlbumTitleValue f = do
 networkDefinition :: RenderM MomentIO ()
 networkDefinition = do 
     (albumRip, albumTitle, albumFrom) <- gets $ snd . (!! 0) . entryRows
-    trackRowWidgets <- gets $ drop 1 . entryRows
+    trackRowWidgets <- gets $ Prelude.drop 1 . entryRows
     let trackRips = map (fst3 . snd) trackRowWidgets
     ripHandlingDefinition albumRip trackRips
     -- entry sanitation
@@ -343,13 +346,23 @@ buttonRow row = do
         , #rowSpacing := 2
         , #columnHomogeneous := True
         ]
-    extract <- new Button 
-        [ #label := "Extract Artists"
+    -- extractHandler <- getExtractHandler "/"
+    po <- newPopover 
+    extract <- new MenuButton
+        [ #direction := ArrowTypeDown
+        , #popover := po
+    --     ]
+    -- extract <- new Button 
+    --     [ #label := "Extract Artists"
         , #halign := AlignStart
         , #hexpand := True
         , #valign := AlignCenter
         , #vexpand := True
-        ] 
+        -- , #child := mb
+        -- , On #clicked extractHandler
+        ]
+    -- #add extract mb
+    -- set mb [#alignWidget := extract]
     #attach lowerGrid extract 0 0 1 1 
     box <- new Box [ #hexpand := True
                     , #halign := AlignCenter
@@ -361,25 +374,78 @@ buttonRow row = do
     stateVar <- asks stateVar
     ok <- new Button 
         [ #label := "Rip Disc"
-        , On #clicked $ handler appWin stateVar InputResultRipDisc
+        , On #clicked $ closeHandler appWin stateVar InputResultRipDisc
         ]
     cancel <- new Button 
         [ #label := "Skip Disc"
-        , On #clicked $ handler appWin stateVar InputResultSkipDisc
+        , On #clicked $ closeHandler appWin stateVar InputResultSkipDisc
         ]
     #packStart box ok False False 0
     #packStart box cancel False False 0
     #attachNextTo lowerGrid box (Just extract) PositionTypeRight 1 1
-    l <- new Label [ #hexpand := True
-                    , #halign := AlignEnd
-                    , #vexpand := True
-                    , #valign := AlignCenter
-                    ] 
+    l <- new Label 
+        [ #hexpand := True
+        , #halign := AlignEnd
+        , #vexpand := True
+        , #valign := AlignCenter
+        ] 
     #attachNextTo lowerGrid l (Just box) PositionTypeRight 1 1
     #attach upperGrid lowerGrid 0 row 4 1
     State.modify $ \s -> s {buttons = Just (extract, ok, cancel)}
   where
-    handler appWin stateVar result = do
+    newPopover :: MonadIO m => RenderM m Popover
+    newPopover = do
+        box <- new Box [#orientation := OrientationVertical]
+        forM_ (["/", "-", "+"] :: [Text]) $
+            liftIO . packStart False False 0 box <=< newDelimBtn
+        liftIO . packStart False False 0 box =<< newDelimEntry
+        pop <- new Popover 
+            -- [ #child := box
+            [ #modal := True
+            , #transitionsEnabled := True
+            ]
+        #add pop box
+        return pop
+    -- packStart 
+    --     :: (MonadIO m, IsWidget w, GObject w, IsDescendantOf Widget w) 
+    --     => Bool -> Bool -> Word32 -> Box -> w -> RenderM m ()
+    packStart exp fill pad parent child = #packStart parent child exp fill pad
+    newDelimBtn :: MonadIO m => Text -> RenderM m Button 
+    newDelimBtn delim = do
+        clkHandler <- getExtractHandler delim
+        liftIO $ new Button 
+            [ #label := delim
+            , On #clicked clkHandler
+            ]
+    newDelimEntry :: MonadIO m => RenderM m Entry
+    newDelimEntry = do
+        config <- ask
+        state <- State.get 
+        entry <- new Entry 
+            [ #placeholderText := "Enter delimiter"
+            , #secondaryIconName := "gtk-apply"
+            , #secondaryIconSensitive := True
+            , #secondaryIconActivatable := True
+            ]
+        void $ on entry #changed $ do 
+            delim <- Gtk.get entry #text
+            (clkHandler, _) <- runRenderM config state $ getExtractHandler delim
+            void $ on entry #iconRelease $ const (const clkHandler) -- \case
+                -- EntryIconPositionSecondary -> clkHandler
+                -- _ -> error "Delimiter entry position is wrong"  
+        return entry
+    getExtractHandler :: MonadIO m => Text -> RenderM m (IO ())
+    getExtractHandler delim = do
+        ers <- gets $ ((\(_, (_, t, f)) -> (t, f)) <$>) . entryRows
+        return $ do 
+            forM_ ers $ \(t, f) -> do
+                title <- Gtk.get t #text
+                from <- Text.strip <$> Gtk.get f #text
+                let (pfx, sfx) = Text.breakOn delim title
+                when (not (Text.null sfx) && Text.strip sfx /= delim && Text.null from) $ do
+                    set t [#text := Text.drop 1 sfx]
+                    set f [#text := pfx]
+    closeHandler appWin stateVar result = do
         modifyMVar_ stateVar $ \state@InputState {..} ->
             return state {inputResult = result}
         #close appWin
