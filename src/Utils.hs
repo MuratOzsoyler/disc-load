@@ -1,19 +1,28 @@
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DataKinds #-}
 module Utils where
 
 import Prelude hiding (any, map, null, FilePath)
 import Control.Applicative ((<|>), optional)
+import Control.Monad ((>=>))
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Data.Maybe (fromJust)
 import Data.Text (any, cons, null, pack, strip, takeEnd, Text, uncons, unpack)
 import Data.Time (defaultTimeLocale, FormatTime, formatTime, getZonedTime)
 import Data.Vector(map)
+import System.IO.Unsafe (unsafePerformIO)
 import Turtle ((<.>), (%), (</>), echo, ExitCode (..), FilePath, Format, format, fromText
               , makeFormat, optPath, Parser, s, shell, testfile, unsafeTextToLine
               )
-import Types ( InputState(..), ItemInfo(..) )
-import System.IO.Unsafe (unsafePerformIO)
-import GI.Gtk (ManagedPtr, GObject, TypedObject, ManagedPtrNewtype, castTo)
+import Data.GI.Base (AttrOp)
+import Data.GI.Base.Attributes (AttrOpTag(AttrSet), AttrGetC, AttrLabelProxy)
+import GI.Gtk (Box, set, styleContextRemoveClass, styleContextAddClass, widgetGetStyleContext
+              , IsWidget, get, ManagedPtr, GObject, TypedObject, ManagedPtrNewtype, castTo
+              )
 import Reactive.Banana (Behavior, Event, MonadMoment, stepper)
+
+import Types ( InputState(..), ItemInfo(..) )
+import Data.Word (Word32)
 
 unicodeReplChar :: Char
 unicodeReplChar = '\xFFFD'
@@ -152,3 +161,19 @@ as s t = fromJust <$> liftIO (castTo t s)
 
 event2Behavior :: MonadMoment m => a -> Event a -> m (Behavior a)
 event2Behavior = stepper
+
+addCssClass, removeCssClass :: (MonadIO m, IsWidget w) => Text -> w -> m ()
+addCssClass cssClass = widgetGetStyleContext >=> flip styleContextAddClass cssClass
+removeCssClass cssClass = widgetGetStyleContext >=> flip styleContextRemoveClass cssClass
+
+packStart 
+    :: (MonadIO m, IsWidget w, GObject w) 
+    => Bool -> Bool -> Word32 -> Box -> w -> m ()
+packStart exp fill pad parent child = #packStart parent child exp fill pad
+
+
+fget :: (MonadIO m, AttrGetC info obj attr result) => AttrLabelProxy attr -> obj -> m result 
+fget = flip get
+
+fset :: MonadIO m => [AttrOp o 'AttrSet] -> o -> m ()
+fset = flip set
