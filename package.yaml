@@ -33,6 +33,7 @@ dependencies:
 # - gi-gtk-declarative-app-simple
 - monad-loops
 - mtl
+- primitive
 - regex-applicative-text
 - time
 - text
