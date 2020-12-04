@@ -1,27 +1,32 @@
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PatternSynonyms #-}
 module UI.Functions where
 
 import Prelude as Prelude
 
-import Control.Concurrent (modifyMVar_, modifyMVar, MVar, readMVar, newMVar)
+import Control.Concurrent (takeMVar, putMVar, modifyMVar_, modifyMVar, MVar, readMVar, newMVar)
 import Control.Monad ((<=<), forM_, forM, unless, void, when)
 import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Primitive (PrimMonad(PrimState))
+import Control.Monad.Reader (ask, asks, runReaderT, ReaderT)
 import Control.Monad.State as State (get, gets, modify, runStateT, StateT)
 import Control.Monad.Trans (MonadTrans(lift))
 import Data.Char (isSpace)
 import Data.Int (Int32)
 import Data.List.Extra (snoc)
-import Data.Maybe (listToMaybe)
+import Data.Maybe (fromJust, isJust, listToMaybe)
 import Data.Monoid (All(..))
-import Data.Text as Text (drop, breakOn, length, strip, last, init, null, Text)
-import Data.Vector as Vector (length, (!), modify, toList)
+import Data.Text as Text (stripEnd, unpack, pack, drop, breakOn, length, strip, last, init, null, Text)
+import Data.Tuple.Extra (snd3, fst3)
+import Data.Vector as Vector (MVector, length, (!), modify, toList)
 import Data.Vector.Mutable as MVector (modify)
 
 import GI.Gio (applicationRun)
 import GI.GLib (idleAdd, pattern PRIORITY_DEFAULT_IDLE)
 
-import GI.Gtk as Gtk (Popover (Popover)
-                     , ArrowType(ArrowTypeDown), MenuButton (MenuButton)
+import GI.Gtk as Gtk (ToggleButton (ToggleButton), toggleButtonToggled, IsMenuButton, PopoverConstraint(PopoverConstraintWindow), ResizeMode(ResizeModeParent)
+                     , Popover (Popover), ArrowType(ArrowTypeDown), MenuButton (MenuButton)
                      , PositionType (..), toggleButtonGetActive
                      , AttrOp(On), Button (Button), get, set
                      , editableSetPosition, editableGetPosition
@@ -37,13 +42,12 @@ import Reactive.Banana.Frameworks (reactimate', changes, reactimate, mapEventIO,
 import Reactive.Banana.GI.Gtk (signalE0, AttrOpBehavior((:==)), sink, attrB)
 import Turtle as Turtle(FilePath, format, testfile)
 
-import Utils (sanitize, mkDirName', mkFileName', defaultTrackTitle
+import Utils (fset, as, packStart, addCssClass, sanitize, mkDirName', mkFileName', defaultTrackTitle
                           , defaultAlbumArtist, defaultAlbumTitle, event2Behavior
                           , i99, mkPlaceHolder
                           )
 import Types (InputResult (..), ItemInfo (..), InputState (..))
-import Control.Monad.Reader (ask, asks, runReaderT, ReaderT)
-import Data.Tuple.Extra (snd3, fst3)
+import Data.GI.Base.Signals (disconnectSignalHandler, SignalHandlerId)
 
 runInput :: InputState -> IO InputState
 runInput input = do
@@ -271,6 +275,11 @@ entryHandlingDefinition entryType defText entry = do
         set entry [#text := value]
         let modifyTitle info = info { title = value }
             modifyFrom info = info { from = value }
+            modifyIdx 
+                :: PrimMonad m 
+                => (ItemInfo -> ItemInfo) 
+                -> MVector (PrimState m) ItemInfo 
+                -> m ()
             modifyIdx f vec =  MVector.modify vec f $ fromIntegral idx
             modifyTrackInfos f = Vector.modify (modifyIdx f) trackInfos
             state' = case entryType of
@@ -292,6 +301,7 @@ trackCheckButtonHandling (idx, cb) = do
     on cb #toggled $ do
         value <- Gtk.get cb #active
         let modifyItemInfo info@ItemInfo {..} = info { rip = value }
+            modifyMVector :: PrimMonad m => MVector (PrimState m) ItemInfo -> m ()
             modifyMVector mv = MVector.modify mv modifyItemInfo idx
         void $ modifyMVar_ stateVar $ \state@InputState {..} ->
             return state 
@@ -347,20 +357,22 @@ buttonRow row = do
         , #columnHomogeneous := True
         ]
     -- extractHandler <- getExtractHandler "/"
-    po <- newPopover 
     extract <- new MenuButton
         [ #direction := ArrowTypeDown
-        , #popover := po
-    --     ]
-    -- extract <- new Button 
-    --     [ #label := "Extract Artists"
         , #halign := AlignStart
         , #hexpand := True
         , #valign := AlignCenter
         , #vexpand := True
-        -- , #child := mb
-        -- , On #clicked extractHandler
         ]
+    po <- newPopover extract
+    set extract [#popover := po]
+    -- on extract #clicked $ do
+    --     mbPo <- Gtk.get extract #popover
+    --     putStrLn $ ("has popover? " ++) $ show $ isJust mbPo
+    --     putStrLn $ ("this popover is that popover? " ++) $ show $ (po ==) $ fromJust mbPo
+    --     putStrLn . ("use popover? " ++) . show =<< Gtk.get extract #usePopover
+
+    set po [#relativeTo := extract]
     -- #add extract mb
     -- set mb [#alignWidget := extract]
     #attach lowerGrid extract 0 0 1 1 
@@ -368,8 +380,10 @@ buttonRow row = do
                     , #halign := AlignCenter
                     , #vexpand := True
                     , #valign := AlignCenter
-                    , #spacing := 10
+                    , #spacing := 0
+                    , #homogeneous := True
                     ]
+    addCssClass "linked" box
     appWin <- asks applicationWindow
     stateVar <- asks stateVar
     ok <- new Button 
@@ -392,63 +406,78 @@ buttonRow row = do
     #attachNextTo lowerGrid l (Just box) PositionTypeRight 1 1
     #attach upperGrid lowerGrid 0 row 4 1
     State.modify $ \s -> s {buttons = Just (extract, ok, cancel)}
-  where
-    newPopover :: MonadIO m => RenderM m Popover
-    newPopover = do
-        box <- new Box [#orientation := OrientationVertical]
-        forM_ (["/", "-", "+"] :: [Text]) $
-            liftIO . packStart False False 0 box <=< newDelimBtn
-        liftIO . packStart False False 0 box =<< newDelimEntry
-        pop <- new Popover 
-            -- [ #child := box
-            [ #modal := True
-            , #transitionsEnabled := True
+--   where
+
+newPopover :: (MonadIO m, IsMenuButton w) => w -> RenderM m Popover
+newPopover btn = do
+    pop <- new Popover 
+        [ #modal := True
+        , #transitionsEnabled := True
+        , #position := PositionTypeBottom
+        , #resizeMode := ResizeModeParent
+        , #constrainTo := PopoverConstraintWindow
+        ]
+    box <- new Box [#orientation := OrientationVertical, #spacing := 0]
+    forM_ (["/", "-", "+"] :: [Text]) $
+        liftIO . packStart False False 0 box <=< newDelimBtn btn
+    liftIO . packStart False False 0 box =<< newDelimEntry btn
+    #add pop box
+    #showAll box
+    -- #show pop
+    return pop
+
+newDelimBtn :: (MonadIO m, IsMenuButton w) => w -> Text -> RenderM m Button 
+newDelimBtn btn delim = do
+    clkHandler <- getExtractHandler delim
+    liftIO $ new Button 
+        [ #label := delim
+        , On #clicked $ clkHandler >> toggleStatus btn
+        ]
+
+newDelimEntry :: (MonadIO m, IsMenuButton w) => w -> RenderM m Entry
+newDelimEntry btn = do
+    config <- ask
+    state <- State.get
+    signalId <- liftIO $ newMVar (Nothing :: Maybe SignalHandlerId)
+    entry <- new Entry 
+        [ #placeholderText := "Enter delimiter"
+        , #secondaryIconName := "gtk-apply"
+        , #secondaryIconSensitive := True
+        , #secondaryIconActivatable := True
+        ]
+    void $ on entry #changed $ do 
+        delim <- Gtk.get entry #text
+        let isDelimFull = not $ Text.null delim
+        set entry 
+            [ #secondaryIconActivatable := isDelimFull
+            , #secondaryIconSensitive := isDelimFull
             ]
-        #add pop box
-        return pop
-    -- packStart 
-    --     :: (MonadIO m, IsWidget w, GObject w, IsDescendantOf Widget w) 
-    --     => Bool -> Bool -> Word32 -> Box -> w -> RenderM m ()
-    packStart exp fill pad parent child = #packStart parent child exp fill pad
-    newDelimBtn :: MonadIO m => Text -> RenderM m Button 
-    newDelimBtn delim = do
-        clkHandler <- getExtractHandler delim
-        liftIO $ new Button 
-            [ #label := delim
-            , On #clicked clkHandler
-            ]
-    newDelimEntry :: MonadIO m => RenderM m Entry
-    newDelimEntry = do
-        config <- ask
-        state <- State.get 
-        entry <- new Entry 
-            [ #placeholderText := "Enter delimiter"
-            , #secondaryIconName := "gtk-apply"
-            , #secondaryIconSensitive := True
-            , #secondaryIconActivatable := True
-            ]
-        void $ on entry #changed $ do 
-            delim <- Gtk.get entry #text
+        when isDelimFull $ do
             (clkHandler, _) <- runRenderM config state $ getExtractHandler delim
-            void $ on entry #iconRelease $ const (const clkHandler) -- \case
-                -- EntryIconPositionSecondary -> clkHandler
-                -- _ -> error "Delimiter entry position is wrong"  
-        return entry
-    getExtractHandler :: MonadIO m => Text -> RenderM m (IO ())
-    getExtractHandler delim = do
-        ers <- gets $ ((\(_, (_, t, f)) -> (t, f)) <$>) . entryRows
-        return $ do 
-            forM_ ers $ \(t, f) -> do
-                title <- Gtk.get t #text
-                from <- Text.strip <$> Gtk.get f #text
-                let (pfx, sfx) = Text.breakOn delim title
-                when (not (Text.null sfx) && Text.strip sfx /= delim && Text.null from) $ do
-                    set t [#text := Text.drop 1 sfx]
-                    set f [#text := pfx]
-    closeHandler appWin stateVar result = do
-        modifyMVar_ stateVar $ \state@InputState {..} ->
-            return state {inputResult = result}
-        #close appWin
+            maybe (return ()) (disconnectSignalHandler entry) =<< takeMVar signalId 
+            putMVar signalId . Just =<<  on entry #iconRelease (\_ _ -> clkHandler >> toggleStatus btn)
+    return entry
+
+getExtractHandler :: MonadIO m => Text -> RenderM m (IO ())
+getExtractHandler delim = do
+    ers <- gets $ ((\(_, (_, t, f)) -> (t, f)) <$>) . entryRows
+    return $ do 
+        let dlen = Text.length delim
+        forM_ ers $ \(t, f) -> do
+            title <- Gtk.get t #text
+            from <- Text.strip <$> Gtk.get f #text
+            putStrLn $ unpack $ "delim=\"" <> delim <> "\""
+            let (pfx, sfx) = Text.breakOn delim title
+                sfx' = Text.stripEnd sfx
+            when (not (Text.null sfx') && sfx /= delim && Text.null from) $ do
+                set t [#text := Text.drop dlen sfx]
+                set f [#text := pfx]
+
+closeHandler :: ApplicationWindow -> MVar InputState -> InputResult -> IO ()
+closeHandler appWin stateVar result = do
+    modifyMVar_ stateVar $ \state@InputState {..} ->
+        return state {inputResult = result}
+    #close appWin
 
 itemRow 
     :: MonadIO m 
@@ -491,3 +520,6 @@ separatorRow gTitle row = do
         , #orientation := OrientationHorizontal
         ] >>= \s -> #packStart box s True True 1
     #attach grid box 0 row 4 1
+
+toggleStatus :: (MonadIO m, IsMenuButton o) => o -> m ()
+toggleStatus btn = btn `as` ToggleButton >>= fset [#active := False]
