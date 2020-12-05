@@ -16,16 +16,17 @@ import Data.Char (isSpace)
 import Data.Int (Int32)
 import Data.List.Extra (snoc)
 import Data.Maybe (fromJust, isJust, listToMaybe)
-import Data.Monoid (All(..))
-import Data.Text as Text (stripEnd, unpack, pack, drop, breakOn, length, strip, last, init, null, Text)
+import Data.Monoid (All(..), Endo(..))
+import Data.Text as Text (count, replace, stripEnd, unpack, drop, breakOn, length, strip, last, init, null, Text)
 import Data.Tuple.Extra (snd3, fst3)
 import Data.Vector as Vector (MVector, length, (!), modify, toList)
 import Data.Vector.Mutable as MVector (modify)
 
+import Data.GI.Base.Signals (disconnectSignalHandler, SignalHandlerId)
 import GI.Gio (applicationRun)
 import GI.GLib (idleAdd, pattern PRIORITY_DEFAULT_IDLE)
 
-import GI.Gtk as Gtk (ToggleButton (ToggleButton), toggleButtonToggled, IsMenuButton, PopoverConstraint(PopoverConstraintWindow), ResizeMode(ResizeModeParent)
+import GI.Gtk as Gtk (ToggleButton (ToggleButton), IsMenuButton, PopoverConstraint(PopoverConstraintWindow), ResizeMode(ResizeModeParent)
                      , Popover (Popover), ArrowType(ArrowTypeDown), MenuButton (MenuButton)
                      , PositionType (..), toggleButtonGetActive
                      , AttrOp(On), Button (Button), get, set
@@ -38,22 +39,21 @@ import GI.Gtk as Gtk (ToggleButton (ToggleButton), toggleButtonToggled, IsMenuBu
                      , Application(Application)
                      )
 import Reactive.Banana (filterE, Event, stepper, unionWith)
-import Reactive.Banana.Frameworks (reactimate', changes, reactimate, mapEventIO, compile, actuate, MomentIO)
+import Reactive.Banana.Frameworks (liftIOLater, reactimate', changes, reactimate, mapEventIO, compile, actuate, MomentIO)
 import Reactive.Banana.GI.Gtk (signalE0, AttrOpBehavior((:==)), sink, attrB)
 import Turtle as Turtle(FilePath, format, testfile)
 
-import Utils (fset, as, packStart, addCssClass, sanitize, mkDirName', mkFileName', defaultTrackTitle
-                          , defaultAlbumArtist, defaultAlbumTitle, event2Behavior
-                          , i99, mkPlaceHolder
-                          )
+import Utils (fset, as, packStart, addCssClass, mkDirName', mkFileName'
+             , defaultTrackTitle, defaultAlbumArtist, defaultAlbumTitle
+             , event2Behavior, i99, mkPlaceHolder
+             )
 import Types (InputResult (..), ItemInfo (..), InputState (..))
-import Data.GI.Base.Signals (disconnectSignalHandler, SignalHandlerId)
 
 runInput :: InputState -> IO InputState
 runInput input = do
     defAlbumTitle <- defaultAlbumTitle
-    let sanitized = sanitize defAlbumTitle input  
-    stateVar <- newMVar sanitized
+    -- let sanitized = sanitize defAlbumTitle input  
+    stateVar <- newMVar input -- sanitized
 
     app <- new Application [#applicationId := "disc.load"]
     void $ on app #activate $ appActivate app defAlbumTitle stateVar
@@ -185,6 +185,12 @@ startDefaultAssign = do
     defaultVar <- asks defaultVar
     idleVar <- asks idleRepeatVar
     defaultAlbumTitle <- asks defAlbumTitle
+    let invalidEscapes = [("\\'", "'")] :: [(Text, Text)]
+        replaceAll = appEndo 
+            $ mconcat 
+            $ Endo . uncurry Text.replace 
+            <$> invalidEscapes
+
     return $ do
         mbEntry <- modifyMVar defaultVar (\defs -> return (Prelude.drop 1 defs, listToMaybe defs))
         when (isJust mbEntry) $ do
@@ -194,8 +200,10 @@ startDefaultAssign = do
                     TrackTitle i -> (fst $ trackEntries !! i, defaultTrackTitle)
                     TrackFrom i -> (snd $ trackEntries !! i, "")
             value <- Gtk.get entry #text
-            when (Text.null $ strip value) $ do
-                set entry [#text := def]
+            let invExist = all ((> 0) . (`Text.count` value) . fst) invalidEscapes 
+            if Text.null $ strip value 
+                then set entry [#text := def]
+                else when invExist $ set entry [#text := replaceAll value]
         readMVar idleVar    
 
 setUpGridChildren :: MonadIO m => RenderM m ()
@@ -284,6 +292,7 @@ entryHandlingDefinition entryType defText entry = do
             _ -> -1
     stateVar <- asks stateVar
     defaultVar <- asks defaultVar
+    liftIO $ modifyMVar_ defaultVar $ return . (`snoc` entryType)
     on entry #changed $ do
         state@InputState {..} <- readMVar stateVar
         let oldValue = case entryType of
