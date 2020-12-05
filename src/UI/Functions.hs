@@ -74,7 +74,8 @@ type Buttons = (MenuButton, Button, Button)
 data RenderConfig = RenderConfig
         { stateVar :: MVar InputState
         , idleRepeatVar :: MVar Bool
-        , fileTestVar :: MVar [FileTest] 
+        , fileTestVar :: MVar [FileTest]
+        , defaultVar :: MVar [EntryType]
         , defAlbumTitle :: Text 
         , applicationWindow :: ApplicationWindow
         , grid :: Grid
@@ -125,12 +126,14 @@ appActivate app defAlbumTitle stVar = do
         , On #deleteEvent $ const $ modifyMVar idleVar $ const $ return (False, False)
         ]
 
-    checkVar :: MVar [FileTest] <- newMVar []
+    checkVar <- newMVar []
+    defaultVar <- newMVar []
 
     let renderConfig = RenderConfig 
             { stateVar = stVar
             , idleRepeatVar = idleVar
             , fileTestVar = checkVar
+            , defaultVar = defaultVar
             , defAlbumTitle = defAlbumTitle
             , applicationWindow = appWin
             , grid = grid
@@ -145,6 +148,8 @@ appActivate app defAlbumTitle stVar = do
         withAlbumTitleValue $ do
             checkFileFunc <- startTestFileExistence
             void $ idleAdd PRIORITY_DEFAULT_IDLE checkFileFunc
+            defaultFunc <- startDefaultAssign
+            void $ idleAdd PRIORITY_DEFAULT_IDLE defaultFunc
             config <- ask
             state <- State.get
             liftIO $ compile (() <$ runRenderM config state networkDefinition) >>= actuate
@@ -171,6 +176,27 @@ startTestFileExistence = do
                 set albumRip [#inconsistent := inconsistent]
                 unless inconsistent $ set albumRip [#active := allActive]
         readMVar idleVar
+
+startDefaultAssign :: RenderM IO (IO Bool)
+startDefaultAssign = do
+    entries <- State.gets $ ((\(_, (_, t, f)) -> (t, f)) <$>) . entryRows
+    let (albumTitle, albumFrom) = head entries
+        trackEntries = Prelude.drop 1 entries
+    defaultVar <- asks defaultVar
+    idleVar <- asks idleRepeatVar
+    defaultAlbumTitle <- asks defAlbumTitle
+    return $ do
+        mbEntry <- modifyMVar defaultVar (\defs -> return (Prelude.drop 1 defs, listToMaybe defs))
+        when (isJust mbEntry) $ do
+            let (entry, def) = case fromJust mbEntry of
+                    AlbumTitle -> (albumTitle, defaultAlbumTitle)
+                    AlbumFrom -> (albumFrom, defaultAlbumArtist)
+                    TrackTitle i -> (fst $ trackEntries !! i, defaultTrackTitle)
+                    TrackFrom i -> (snd $ trackEntries !! i, "")
+            value <- Gtk.get entry #text
+            when (Text.null $ strip value) $ do
+                set entry [#text := def]
+        readMVar idleVar    
 
 setUpGridChildren :: MonadIO m => RenderM m ()
 setUpGridChildren = do
@@ -257,6 +283,7 @@ entryHandlingDefinition entryType defText entry = do
             TrackFrom i -> i
             _ -> -1
     stateVar <- asks stateVar
+    defaultVar <- asks defaultVar
     on entry #changed $ do
         state@InputState {..} <- readMVar stateVar
         let oldValue = case entryType of
@@ -269,10 +296,11 @@ entryHandlingDefinition entryType defText entry = do
                 | Text.null newValue = newValue
                 | oldValue == Text.init newValue && isSpace (Text.last newValue) = newValue 
                 | otherwise = strip newValue 
-        value <- (\t -> if Text.null t then defText else t) 
-            . conditionalStrip 
+        value <- {- (\t -> if Text.null t then defText else t) 
+            . -} conditionalStrip 
             <$> Gtk.get entry #text
         set entry [#text := value]
+        modifyMVar_ defaultVar $ return . (`snoc` entryType)
         let modifyTitle info = info { title = value }
             modifyFrom info = info { from = value }
             modifyIdx 
