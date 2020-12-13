@@ -40,8 +40,8 @@ packages:
 #   commit: e7b331f14bcffb8367cd58fbfc8b40ec7642100a
 #
 extra-deps:
-- gi-gtk-declarative-0.6.3@sha256:8db2e8a9fa20673406e4500e5040d4384eb76e362d45ffe69116575ae03ff1e3,4411
-- gi-gtk-declarative-app-simple-0.6.3@sha256:2b201371acd292ef8d980be02809787293f7c30e505c84910b57e307af999cc9,1818
+- reactive-banana-1.2.1.0@sha256:af0a41dec95e1478acd5280f0fdde51afddf9fbfa4e0a4c226a2c6fa65702796,3975
+- reactive-banana-gi-gtk-0.4.1.0@sha256:48dbe5fd2c5a4c6d42c1e2081b7ee3a317d665c46eb8acf4ed9b9f5b816dc275,1196
 - haskell-gi-0.24.5
 - haskell-gi-base-0.24.3
 - gi-pango-1.0.23

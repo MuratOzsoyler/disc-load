@@ -11,16 +11,17 @@ import Turtle (cd, echo, fromString, options, textToLine, toText)
 
 import DiscHandling.Inspection ( parseDiscInfo, readDiscInfo )
 import DiscHandling.Ripping ( writeTracks )
-import DiscHandling.Utils
+import Utils
     ( createDirectory,
       ejectDisc,
       loadDisc,
       mkDirName,
       optionsParser,
-      shellQuote )
+      shellQuote, 
+      showText)
 import UI.Functions ( runInput )
 import UI.Interaction ( getContinueConfirm, promptDisc )
-import UI.Types (InputResult(InputResultRipDisc),  InputState(..), ItemInfo(..) )
+import Types (InputResult(InputResultRipDisc),  InputState(..), ItemInfo(..) )
 
 programTitle :: Text
 programTitle = "Audio CD Ripper"
@@ -37,30 +38,13 @@ main = do
     hSetBuffering stdout NoBuffering
     putStrLn programTitle >> putStrLn ""
 
+    ejectDisc
     flip untilM_ (not <$> getContinueConfirm) $ do
-        ejectDisc
         promptDisc
         loadDisc
         info <- readDiscInfo
-        -- let info = Just $ select ([] :: [Line])
         when (isJust info) $ do
             discInfo@InputState {..} <- parseDiscInfo info
-            -- let discInfo@InputState {..} = emptyInputState 
-            --         { albumInfo = ItemInfo "Üstad" "Münir Nurettin Selçuk" 
-            --         , trackInfos = fromList
-            --             [ ItemInfo "Track 01" ""
-            --             , ItemInfo "Track 02" ""
-            --             , ItemInfo "Track 03" ""
-            --             , ItemInfo "Track 03" ""
-            --             , ItemInfo "Track 04" ""
-            --             , ItemInfo "Track 05" ""
-            --             , ItemInfo "Track 06" ""
-            --             , ItemInfo "Track 07" ""
-            --             , ItemInfo "Track 08" ""
-            --             , ItemInfo "Track 09" ""
-            --             , ItemInfo "Track 10" ""
-            --             ]
-            --         } 
             print albumInfo
             print trackInfos
             discOutput@InputState {..} <- runInput discInfo
@@ -71,20 +55,21 @@ main = do
                 echo $ fromMaybe "Invalid text!" $ textToLine $ shellQuote $ either id id $ toText dirName
                 createDirectory $ shellQuote $ either id id $ toText dirName
                 writeTracks dirName (from albumInfo) trackInfos
-        
-        echo "Do not forget to pick the disc off the tray and close the drive door"
         ejectDisc
+                
+    echo "Do not forget to pick the disc off the tray and close the drive door"
 
 printDiscOutput :: InputState -> IO ()
 printDiscOutput InputState {..} = do
+    putStrLn $ "inputResult=" <> showText inputResult 
     putStrLn "Album Info"
     printItemInfo albumInfo
     putStrLn "Track Infos"
     forM_ trackInfos printItemInfo 
 
 printItemInfo :: ItemInfo -> IO ()
-printItemInfo ItemInfo {..} = do
-    putStrLn 
-        $ "title=" <> pack (show title)
-        <> ", "
-        <> "from=" <> pack (show from)
+printItemInfo = print --ItemInfo {..} = do
+    -- putStrLn 
+    --     $ "title=" <> pack (show title)
+    --     <> ", "
+    --     <> "from=" <> pack (show from)

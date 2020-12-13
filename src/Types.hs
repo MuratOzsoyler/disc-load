@@ -1,32 +1,29 @@
-module UI.Types where
+module Types where
 
-import Data.Int (Int32)
 import Data.Text (Text)
 import Data.Vector (empty, Vector)
 
 data ItemInfo = ItemInfo 
-        { title :: Text
+        { rip :: Bool
+        , title :: Text
         , from :: Text
         }
         deriving Show
 
 emptyItemInfo :: ItemInfo
-emptyItemInfo = ItemInfo mempty mempty
+emptyItemInfo = ItemInfo True mempty mempty
 
 data InputState = InputState
         { albumInfo :: ItemInfo
         , trackInfos :: Vector ItemInfo
-        , sanitize :: InputState -> InputState
+        -- , sanitize :: InputState -> InputState
         , expandFillIdx :: Int
         , inputResult :: InputResult
         }
-        -- deriving Show
+        deriving Show
 
 emptyInputState :: InputState
-emptyInputState = InputState emptyItemInfo empty id 0 InputResultSkipDisc
-
-data InputEvent = Closed | Escaped | Clicked | OK | Cancel | Changed Int32 Int32 Text | NotChanged
-        deriving Show
+emptyInputState = InputState emptyItemInfo empty {- id -} 0 InputResultSkipDisc
 
 data InputResult = InputResultRipDisc | InputResultSkipDisc
         deriving (Show, Eq)

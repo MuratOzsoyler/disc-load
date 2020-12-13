@@ -1,10 +1,10 @@
 name:                disk-load
-version:             0.1.0.0
+version:             0.2.0.0
 github:              "MuratOzsoyler/disk-load"
 license:             BSD3
 author:              "Murat Özsöyler"
 maintainer:          "murat.ozsoyler@gmail.com"
-copyright:           "202? Murat Özsöyler"
+copyright:           "2020 Murat Özsöyler"
 
 extra-source-files:
 - README.md
@@ -22,10 +22,18 @@ description:         Please see the README on GitHub at <https://github.com/Mura
 dependencies:
 - base >= 4.7 && < 5
 - data-default-class
+- extra
+- gi-gio
+- gi-glib
 - gi-gtk
-- gi-gtk-declarative
-- gi-gtk-declarative-app-simple
+- haskell-gi-base
+- reactive-banana
+- reactive-banana-gi-gtk
+# - gi-gtk-declarative
+# - gi-gtk-declarative-app-simple
 - monad-loops
+- mtl
+- primitive
 - regex-applicative-text
 - time
 - text
@@ -45,9 +53,18 @@ library:
   source-dirs: src
 
 executables:
-  disk-load-exe:
+  # disk-load-exe:
+  #   main:                Main.hs
+  #   source-dirs:         app
+  #   ghc-options:
+  #   - -threaded
+  #   - -rtsopts
+  #   - -with-rtsopts=-N
+  #   dependencies:
+  #   - disk-load
+  gui-test-exe:
     main:                Main.hs
-    source-dirs:         app
+    source-dirs:         gui-test
     ghc-options:
     - -threaded
     - -rtsopts
