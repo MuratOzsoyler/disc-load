@@ -71,8 +71,8 @@ data ExtractType = ArtistTitle | TitleArtist
         deriving Enum
 instance Show ExtractType where
     show = \case
-        ArtistTitle -> "Author then Title"
-        TitleArtist -> "Title then Author"
+        ArtistTitle -> "Artist then Title"
+        TitleArtist -> "Title then Artist"
 
 type RowWidgets = (CheckButton, Entry, Entry)
 
@@ -510,14 +510,14 @@ newDelimEntry btn = do
 getExtractHandler :: MonadIO m => Text -> RenderM m (IO ())
 getExtractHandler delim = do
     ers <- gets $ ((\(_, (_, t, f)) -> (t, f)) <$>) . entryRows
-    extractType <- liftIO . readMVar =<< gets extractTypeVar
+    extrVar <- gets extractTypeVar
     return $ do 
+        extractType <- liftIO $ readMVar extrVar 
         let dlen = Text.length delim
         forM_ ers $ \(t, f) -> do
             title <- Gtk.get t #text
             from <- Text.strip <$> Gtk.get f #text
             when (Text.null from) $ do
-                putStrLn $ unpack $ "delim=\"" <> delim <> "\""
                 case extractType of
                     ArtistTitle -> do
                         let (pfx, sfx) = Text.breakOn delim title
@@ -527,10 +527,10 @@ getExtractHandler delim = do
                             set f [#text := pfx]
                     TitleArtist -> do
                         let (pfx, sfx) = Text.breakOnEnd delim title
-                            sfx' = Text.strip sfx
-                        when (not (Text.null pfx) && pfx /= delim) $ do
+                            pfx' = Text.strip pfx
+                        when (not (Text.null pfx') && pfx /= delim) $ do
                             set t [#text := Text.dropEnd dlen pfx]
-                            set f [#text := sfx']
+                            set f [#text := sfx]
 
 closeHandler :: ApplicationWindow -> MVar InputState -> InputResult -> IO ()
 closeHandler appWin stateVar result = do
