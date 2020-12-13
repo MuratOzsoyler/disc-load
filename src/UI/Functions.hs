@@ -17,7 +17,7 @@ import Data.Int (Int32)
 import Data.List.Extra (snoc)
 import Data.Maybe (fromJust, isJust, listToMaybe)
 import Data.Monoid (All(..), Endo(..))
-import Data.Text as Text (count, replace, stripEnd, unpack, drop, breakOn, length, strip, last, init, null, Text)
+import Data.Text as Text (dropEnd, breakOnEnd, count, replace, stripEnd, unpack, drop, breakOn, length, strip, last, init, null, Text)
 import Data.Tuple.Extra (snd3, fst3)
 import Data.Vector as Vector (MVector, length, (!), modify, toList)
 import Data.Vector.Mutable as MVector (modify)
@@ -39,11 +39,11 @@ import GI.Gtk as Gtk (ToggleButton (ToggleButton), IsMenuButton, PopoverConstrai
                      , Application(Application)
                      )
 import Reactive.Banana (filterE, Event, stepper, unionWith)
-import Reactive.Banana.Frameworks (liftIOLater, reactimate', changes, reactimate, mapEventIO, compile, actuate, MomentIO)
+import Reactive.Banana.Frameworks (reactimate', changes, reactimate, mapEventIO, compile, actuate, MomentIO)
 import Reactive.Banana.GI.Gtk (signalE0, AttrOpBehavior((:==)), sink, attrB)
 import Turtle as Turtle(FilePath, format, testfile)
 
-import Utils (fset, as, packStart, addCssClass, mkDirName', mkFileName'
+import Utils (showText, fset, as, packStart, addCssClass, mkDirName', mkFileName'
              , defaultTrackTitle, defaultAlbumArtist, defaultAlbumTitle
              , event2Behavior, i99, mkPlaceHolder
              )
@@ -67,6 +67,13 @@ data EntryType = AlbumTitle | AlbumFrom | TrackTitle Int | TrackFrom Int
 data FileTest = FileTest {idx :: Int, path :: Turtle.FilePath}
         deriving Show
 
+data ExtractType = ArtistTitle | TitleArtist
+        deriving Enum
+instance Show ExtractType where
+    show = \case
+        ArtistTitle -> "Author then Title"
+        TitleArtist -> "Title then Author"
+
 type RowWidgets = (CheckButton, Entry, Entry)
 
 type Buttons = (MenuButton, Button, Button)
@@ -85,18 +92,8 @@ data RenderState = RenderState
         { gridRow :: Int
         , entryRows :: [(Int, RowWidgets)]
         , buttons :: Maybe Buttons
+        , extractTypeVar :: MVar ExtractType
         }
-
--- newtype RenderM m a = RenderM { runRenderM :: ReaderT RenderConfig (StateT RenderState m) a }
---             deriving ( Functor
---                      , Applicative
---                      , Monad
---                      , MonadReader RenderConfig
---                      , MonadState RenderState
---                      )
-
--- render :: RenderConfig -> RenderState -> RenderM m a -> m (a, RenderState)
--- render config state action = runStateT (runReaderT (runRenderM action) config) state
 
 type RenderM m a = ReaderT RenderConfig (StateT RenderState m) a
 
@@ -128,7 +125,7 @@ appActivate app defAlbumTitle stVar = do
 
     checkVar <- newMVar []
     defaultVar <- newMVar []
-
+    extractTypeVar <- newMVar ArtistTitle
     let renderConfig = RenderConfig 
             { stateVar = stVar
             , idleRepeatVar = idleVar
@@ -142,6 +139,7 @@ appActivate app defAlbumTitle stVar = do
             { gridRow = 0
             , entryRows = []
             , buttons = Nothing
+            , extractTypeVar = extractTypeVar
             }
     runRenderM renderConfig renderState $ do
         setUpGridChildren
@@ -232,13 +230,12 @@ networkDefinition = do
     let trackRips = map (fst3 . snd) trackRowWidgets
     ripHandlingDefinition albumRip trackRips
     -- entry sanitation
-    defAlbumTitle <- asks defAlbumTitle
-    entryHandlingDefinition AlbumTitle defAlbumTitle albumTitle
-    entryHandlingDefinition AlbumFrom defaultAlbumArtist albumFrom
+    entryHandlingDefinition AlbumTitle albumTitle
+    entryHandlingDefinition AlbumFrom albumFrom
     let trackEntries = map (\(i, (_, t, f)) -> (i, t, f)) trackRowWidgets
     forM_ trackEntries $ \(i, t, f) -> do
-        entryHandlingDefinition (TrackTitle i) defaultTrackTitle t
-        entryHandlingDefinition (TrackFrom i) "" f
+        entryHandlingDefinition (TrackTitle i) t
+        entryHandlingDefinition (TrackFrom i) f
     -- -- file existence tests
     let fromTextB = lift'' . flip attrB #text
     albumTitleB <- fromTextB albumTitle
@@ -284,8 +281,8 @@ ripHandlingDefinition albumRip trackRips = do
 allChecked :: (b -> Bool) -> [b] -> Bool    
 allChecked f = getAll . mconcat . (All . f <$>) 
     
-entryHandlingDefinition :: EntryType -> Text -> Entry -> RenderM MomentIO ()    
-entryHandlingDefinition entryType defText entry = do
+entryHandlingDefinition :: EntryType -> Entry -> RenderM MomentIO ()    
+entryHandlingDefinition entryType entry = do
     let idx = case entryType of
             TrackTitle i -> i
             TrackFrom i -> i
@@ -443,7 +440,6 @@ buttonRow row = do
     #attachNextTo lowerGrid l (Just box) PositionTypeRight 1 1
     #attach upperGrid lowerGrid 0 row 4 1
     State.modify $ \s -> s {buttons = Just (extract, ok, cancel)}
---   where
 
 newPopover :: (MonadIO m, IsMenuButton w) => w -> RenderM m Popover
 newPopover btn = do
@@ -455,13 +451,29 @@ newPopover btn = do
         , #constrainTo := PopoverConstraintWindow
         ]
     box <- new Box [#orientation := OrientationVertical, #spacing := 0]
+    liftIO . packStart False False 0 box =<< newExtrBtn btn
+    liftIO . packStart False False 0 box 
+        =<< new Separator [#orientation := OrientationHorizontal]
     forM_ (["/", "-", "+"] :: [Text]) $
         liftIO . packStart False False 0 box <=< newDelimBtn btn
     liftIO . packStart False False 0 box =<< newDelimEntry btn
     #add pop box
     #showAll box
-    -- #show pop
     return pop
+
+newExtrBtn ::  (MonadIO m, IsMenuButton w) => w -> RenderM m Button 
+newExtrBtn _ = do
+    extVar <- gets extractTypeVar
+    extBtn <- liftIO $ new Button [#label :=> showText <$> readMVar extVar]
+    on extBtn #clicked $ 
+        set extBtn 
+            [ #label :=> showText <$> modifyMVar extVar 
+                (\case
+                    ArtistTitle -> return (TitleArtist, TitleArtist)
+                    TitleArtist -> return (ArtistTitle, ArtistTitle)
+                )
+            ] 
+    return extBtn
 
 newDelimBtn :: (MonadIO m, IsMenuButton w) => w -> Text -> RenderM m Button 
 newDelimBtn btn delim = do
@@ -498,17 +510,27 @@ newDelimEntry btn = do
 getExtractHandler :: MonadIO m => Text -> RenderM m (IO ())
 getExtractHandler delim = do
     ers <- gets $ ((\(_, (_, t, f)) -> (t, f)) <$>) . entryRows
+    extractType <- liftIO . readMVar =<< gets extractTypeVar
     return $ do 
         let dlen = Text.length delim
         forM_ ers $ \(t, f) -> do
             title <- Gtk.get t #text
             from <- Text.strip <$> Gtk.get f #text
-            putStrLn $ unpack $ "delim=\"" <> delim <> "\""
-            let (pfx, sfx) = Text.breakOn delim title
-                sfx' = Text.stripEnd sfx
-            when (not (Text.null sfx') && sfx /= delim && Text.null from) $ do
-                set t [#text := Text.drop dlen sfx]
-                set f [#text := pfx]
+            when (Text.null from) $ do
+                putStrLn $ unpack $ "delim=\"" <> delim <> "\""
+                case extractType of
+                    ArtistTitle -> do
+                        let (pfx, sfx) = Text.breakOn delim title
+                            sfx' = Text.stripEnd sfx
+                        when (not (Text.null sfx') && sfx /= delim) $ do
+                            set t [#text := Text.drop dlen sfx]
+                            set f [#text := pfx]
+                    TitleArtist -> do
+                        let (pfx, sfx) = Text.breakOnEnd delim title
+                            sfx' = Text.strip sfx
+                        when (not (Text.null pfx) && pfx /= delim) $ do
+                            set t [#text := Text.dropEnd dlen pfx]
+                            set f [#text := sfx']
 
 closeHandler :: ApplicationWindow -> MVar InputState -> InputResult -> IO ()
 closeHandler appWin stateVar result = do
