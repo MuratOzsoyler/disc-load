@@ -43,7 +43,7 @@ import Reactive.Banana.Frameworks (reactimate', changes, reactimate, mapEventIO,
 import Reactive.Banana.GI.Gtk (signalE0, AttrOpBehavior((:==)), sink, attrB)
 import Turtle as Turtle(FilePath, format, testfile)
 
-import Utils (showText, fset, as, packStart, addCssClass, mkDirName', mkFileName'
+import Utils (loadDisc, ejectDisc, showText, fset, as, packStart, addCssClass, mkDirName', mkFileName'
              , defaultTrackTitle, defaultAlbumArtist, defaultAlbumTitle
              , event2Behavior, i99, mkPlaceHolder
              )
@@ -410,18 +410,20 @@ buttonRow row = do
     -- #add extract mb
     -- set mb [#alignWidget := extract]
     #attach lowerGrid extract 0 0 1 1 
-    box <- new Box [ #hexpand := True
-                    , #halign := AlignCenter
-                    , #vexpand := True
-                    , #valign := AlignCenter
-                    , #spacing := 0
-                    , #homogeneous := True
-                    ]
+    box <- new Box 
+        [ #hexpand := True
+        , #halign := AlignCenter
+        , #vexpand := True
+        , #valign := AlignCenter
+        , #spacing := 0
+        , #homogeneous := True
+        ]
     addCssClass "linked" box
     appWin <- asks applicationWindow
     stateVar <- asks stateVar
     ok <- new Button 
         [ #label := "Rip Disc"
+        , 
         , On #clicked $ closeHandler appWin stateVar InputResultRipDisc
         ]
     cancel <- new Button 
@@ -431,13 +433,43 @@ buttonRow row = do
     #packStart box ok False False 0
     #packStart box cancel False False 0
     #attachNextTo lowerGrid box (Just extract) PositionTypeRight 1 1
-    l <- new Label 
-        [ #hexpand := True
+    eject <- new ToggleButton
+        [ #label := "Eject Disk"
+        , #hexpand := False
         , #halign := AlignEnd
+        , #vexpand := False
+        , #valign := AlignCenter
+        ]
+    warning <- new Popover 
+        [ #modal := False
+        , #transitionsEnabled := True
+        , #position := PositionTypeTop
+        -- , #resizeMode := ResizeModeParent
+        , #constrainTo := PopoverConstraintWindow
+        , #relativeTo := eject
+        ]
+    #add warning =<< new Label
+        [ #label := "Be careful reloading the same disk\nas the disk labels will not be read again!"
+        , #hexpand := True
+        , #halign := AlignCenter
         , #vexpand := True
         , #valign := AlignCenter
-        ] 
-    #attachNextTo lowerGrid l (Just box) PositionTypeRight 1 1
+        -- , #parent := warning
+        ]
+    #showAll warning
+    #popdown warning
+    on eject #toggled $ do
+        active <- Gtk.get eject #active
+        if active 
+            then liftIO $ putStrLn ejectDisc {- "disk ejected" -}
+            else liftIO $ putStrLn loadDisc {- "disk loaded" -}
+        set ok [#sensitive := not active]
+        -- set cancel [#sensitive := not active]
+        set eject [#label := if active then "Load Disk" else "Eject Disk"]
+        (if active then #popup else #popdown) warning
+        return ()
+
+    #attachNextTo lowerGrid eject (Just box) PositionTypeRight 1 1
     #attach upperGrid lowerGrid 0 row 4 1
     State.modify $ \s -> s {buttons = Just (extract, ok, cancel)}
 
