@@ -423,7 +423,6 @@ buttonRow row = do
     stateVar <- asks stateVar
     ok <- new Button 
         [ #label := "Rip Disc"
-        , 
         , On #clicked $ closeHandler appWin stateVar InputResultRipDisc
         ]
     cancel <- new Button 
@@ -461,8 +460,8 @@ buttonRow row = do
     on eject #toggled $ do
         active <- Gtk.get eject #active
         if active 
-            then liftIO $ putStrLn ejectDisc {- "disk ejected" -}
-            else liftIO $ putStrLn loadDisc {- "disk loaded" -}
+            then ejectDisc {- liftIO $ putStrLn "disk ejected" -}
+            else loadDisc {- liftIO $ putStrLn "disk loaded" -}
         set ok [#sensitive := not active]
         -- set cancel [#sensitive := not active]
         set eject [#label := if active then "Load Disk" else "Eject Disk"]
